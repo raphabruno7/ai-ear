@@ -1,0 +1,26 @@
+# deps
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+
+# env
+.env
+.env.local
+!.env.example
+
+# next
+web/.next/
+web/out/
+
+# build / scratch
+dist/
+*.log
+.DS_Store
+supabase/.temp/
+
+# eval / loadtest artifacts (audio + generated reports kept out of git)
+eval/dataset/**/*.wav
+eval/dataset/**/*.mp3
+eval/runs/
+loadtest/results/
