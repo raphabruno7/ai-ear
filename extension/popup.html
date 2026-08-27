@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body { font: 13px system-ui, sans-serif; width: 260px; margin: 0; padding: 12px; }
+    label { display: block; margin: 8px 0 2px; color: #555; }
+    input { width: 100%; box-sizing: border-box; padding: 5px; }
+    button { margin-top: 10px; width: 100%; padding: 6px; }
+    #fields { margin-top: 10px; border-top: 1px solid #eee; padding-top: 8px; }
+    #fields div { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
+    #fields span:first-child { color: #888; }
+  </style>
+</head>
+<body>
+  <label>WebSocket URL</label>
+  <input id="wsUrl" placeholder="ws://localhost:3000/api/ws" />
+  <label>Session ID</label>
+  <input id="sessionId" placeholder="room name / session id" />
+  <button id="save">Connect</button>
+  <div id="status"></div>
+  <div id="fields"></div>
+  <script src="popup.js"></script>
+</body>
+</html>
