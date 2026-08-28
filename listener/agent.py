@@ -2,11 +2,15 @@
 to every human's audio track, streams each to AWS Transcribe, and feeds the
 running transcript to the incremental field extractor.
 
-No TTS. No RealtimeModel. No AgentSession. This agent never speaks.
+No TTS. No audio published. This agent never speaks.
 
-Forked from voice-demo/livekit-agent/agent.py (worker options + health server).
+    python agent.py --room demo-1 [--vcc vcc-1] [--language en-US]
+
+Deploys to Railway (Dockerfile). In production a room is assigned via an HTTP
+trigger; for the demo the room name is a CLI arg.
 """
 
+import argparse
 import asyncio
 import logging
 import os
@@ -15,55 +19,81 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from dotenv import load_dotenv
 from livekit import rtc
-from livekit.agents import JobContext, WorkerOptions, cli
 
-from transcribe_stream import TranscribeSession  # Fase 1
-from extract import Extractor                    # Fase 2
+from extract import Extractor
+from lktoken import listener_token
+from transcribe_stream import TranscribeSession
 
-load_dotenv()
-logging.basicConfig(level=logging.INFO)
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("copilot-listener")
 
-WEB_BASE_URL = os.environ.get("WEB_BASE_URL", "http://localhost:3000")
-FIELDS_SECRET = os.environ.get("FIELDS_WEBHOOK_SECRET", "")
+REGION = os.environ.get("AWS_REGION", "us-east-1")
+LIVEKIT_URL = os.environ["LIVEKIT_URL"]
 
 
-async def entrypoint(ctx: JobContext) -> None:
-    await ctx.connect(auto_subscribe=rtc.AutoSubscribe.AUDIO_ONLY)
-    room = ctx.room
-    logger.info("listening on room=%s", room.name)
+def _supabase():
+    from supabase import create_client
+    return create_client(os.environ["NEXT_PUBLIC_SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
 
-    extractor = Extractor(
-        room_name=room.name,
-        web_base_url=WEB_BASE_URL,
-        fields_secret=FIELDS_SECRET,
-    )
 
-    # one Transcribe stream per human participant; speaker label comes from
-    # which participant the track belongs to (cleaner than Transcribe diarization).
+async def run_listener(room_name: str, vcc_id: str, language: str) -> str:
+    sb = _supabase()
+    row = sb.table("sessions").upsert(
+        {"room_name": room_name, "vcc_id": vcc_id, "call_source": "sim"},
+        on_conflict="room_name",
+    ).execute().data[0]
+    session_id = row["id"]
+    logger.info("session %s (room=%s vcc=%s)", session_id, room_name, vcc_id)
+
+    extractor = Extractor(room_name=room_name)
     sessions: dict[str, TranscribeSession] = {}
+    done = asyncio.Event()
+    room = rtc.Room()
 
-    async def on_track(track: rtc.Track, participant: rtc.RemoteParticipant) -> None:
+    def _start(track: rtc.Track, participant: rtc.RemoteParticipant) -> None:
         if track.kind != rtc.TrackKind.KIND_AUDIO:
             return
         speaker = participant.identity  # "vcc" | "family"
-        ts = TranscribeSession(speaker=speaker, on_final=extractor.on_turn)
+        stream = rtc.AudioStream(track, sample_rate=16_000, num_channels=1)
+        ts = TranscribeSession(speaker, extractor.on_turn, REGION, language)
         sessions[participant.sid] = ts
-        await ts.run(rtc.AudioStream(track))
+        logger.info("transcribing track from %s", speaker)
+        asyncio.create_task(ts.run(stream))
 
     @room.on("track_subscribed")
     def _(track, pub, participant):
-        asyncio.create_task(on_track(track, participant))
+        _start(track, participant)
+
+    @room.on("participant_disconnected")
+    def _(participant):
+        # end the call once every human has left
+        if not [p for p in room.remote_participants.values()]:
+            done.set()
 
     @room.on("disconnected")
     def _(*_a):
-        asyncio.create_task(extractor.flush())
+        done.set()
 
-    # keep the job alive until the room ends
-    await ctx.wait_for_disconnect()
-    await extractor.flush()
+    await room.connect(LIVEKIT_URL, listener_token(room_name))
+    logger.info("connected, listening")
+    # pick up tracks already present
+    for p in room.remote_participants.values():
+        for pub in p.track_publications.values():
+            if pub.track:
+                _start(pub.track, p)
+
+    await done.wait()
     for ts in sessions.values():
         await ts.close()
+    await extractor.flush()
+
+    total_audio = sum(ts.audio_seconds for ts in sessions.values())
+    sb.table("sessions").update({"ended_at": "now()"}).eq("id", session_id).execute()
+    logger.info("session %s ended — %.1fs audio, %d turns, fields=%s",
+                session_id, total_audio, len(extractor.turns), extractor.snapshot())
+    await room.disconnect()
+    return session_id
 
 
 # ── health server (Railway) ──────────────────────────────────────────────
@@ -88,11 +118,17 @@ def _start_health_server(port: int) -> None:
     logger.info("health server on :%d", port)
 
 
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--room", required=True)
+    ap.add_argument("--vcc", default="vcc-1")
+    ap.add_argument("--language", default="en-US")
+    ap.add_argument("--health-port", type=int, default=int(os.environ.get("PORT", 8081)))
+    args = ap.parse_args()
+
+    _start_health_server(args.health_port)
+    asyncio.run(run_listener(args.room, args.vcc, args.language))
+
+
 if __name__ == "__main__":
-    _start_health_server(int(os.environ.get("PORT", 8081)))
-    cli.run_app(WorkerOptions(
-        entrypoint_fnc=entrypoint,
-        agent_name="copilot-listener",
-        num_idle_processes=2,
-        load_threshold=0.75,
-    ))
+    main()

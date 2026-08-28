@@ -38,8 +38,8 @@ AWS SES ──► pre-visit briefing email (daily cron)
 ## Status
 
 - [x] **Fase 0** — scaffold, migrations, `.env.example`, AWS setup guide
-- [ ] **Fase 1** — listener + AWS Transcribe streaming *(blocked: AWS + LiveKit keys)*
-- [ ] **Fase 2** — incremental Bedrock extraction *(blocked: AWS)*
+- [~] **Fase 1** — listener + AWS Transcribe streaming — code done, LiveKit wiring verified; Transcribe call blocked on new-account activation (retry in hours)
+- [ ] **Fase 2** — incremental Bedrock extraction *(blocked: AWS new-account activation)*
 - [ ] **Fase 3** — Langfuse tracing *(blocked: Langfuse keys)*
 - [ ] **Fase 4** — SES briefing (cron) *(blocked: AWS SES)*
 - [~] **Fase 5** — golden-set A/B eval — `eval/metrics.py` done; harness + dataset pending AWS + Gemini

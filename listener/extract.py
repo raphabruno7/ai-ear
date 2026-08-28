@@ -1,21 +1,23 @@
 """Incremental structured field extraction.
 
-Fase 2: on each final turn, call Bedrock (Claude Haiku) `converse` with the
-accumulated transcript + a forced tool call `emit_fields`, then merge each
-field into state (only overwrite when new confidence > stored confidence).
-Persist every change to `extracted_fields` with latency_ms and POST it to the
-web dashboard. `@observe` (Langfuse) goes on `on_turn` in Fase 3.
-
-Stub for now: accumulates transcript, exposes the merge logic (which IS
-unit-testable) and leaves the model call unimplemented.
+Fase 1: `on_turn` just accumulates the transcript and reports turns (so the
+Transcribe wiring is testable end to end).
+Fase 2: `_extract` calls Bedrock (Claude Haiku) `converse` with the accumulated
+transcript + a forced `emit_fields` tool call, merges each field (only overwrite
+when new confidence > stored), persists changes to `extracted_fields` with
+latency_ms, and POSTs them to the web dashboard. `@observe` (Langfuse) goes on
+`on_turn` in Fase 3.
 """
 
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass, field as dc_field
 
 from pydantic import BaseModel
+
+logger = logging.getLogger("copilot-listener.extract")
 
 
 class AppointmentFields(BaseModel):
@@ -39,6 +41,7 @@ class Extractor:
     room_name: str
     web_base_url: str = ""
     fields_secret: str = ""
+    on_field_change: "callable | None" = None  # (name, value, confidence, latency_ms) -> Awaitable
     _transcript: list[tuple[str, str]] = dc_field(default_factory=list)
     _state: dict[str, _FieldState] = dc_field(default_factory=dict)
 
@@ -53,12 +56,21 @@ class Extractor:
     def snapshot(self) -> dict[str, str]:
         return {k: v.value for k, v in self._state.items()}
 
+    @property
+    def turns(self) -> list[tuple[str, str]]:
+        return list(self._transcript)
+
     async def on_turn(self, speaker: str, text: str) -> None:
         self._transcript.append((speaker, text))
-        _turn_ts = time.monotonic()
-        # Fase 2: call Bedrock, iterate emitted fields -> self.merge(...) ->
-        # persist changed ones with latency_ms = (now - _turn_ts) * 1000.
-        raise NotImplementedError("Fase 2: Bedrock converse + merge + persist")
+        logger.info("[%s] %s", speaker, text)
+        turn_ts = time.monotonic()
+        await self._extract(turn_ts)
+
+    async def _extract(self, turn_ts: float) -> None:
+        # Fase 2: Bedrock converse over self._transcript -> emitted fields ->
+        # self.merge(...) -> for each changed field, persist + notify with
+        # latency_ms = (time.monotonic() - turn_ts) * 1000
+        return
 
     async def flush(self) -> None:
         pass
@@ -67,9 +79,9 @@ class Extractor:
 def demo() -> None:
     e = Extractor(room_name="t")
     assert e.merge("owner_name", "Kathleen", 0.7) is True
-    assert e.merge("owner_name", "Cathlyn", 0.5) is False   # lower confidence ignored
-    assert e.merge("owner_name", "Kathleen", 0.9) is False  # same value, no change
-    assert e.merge("owner_name", "Katherine", 0.95) is True # correction wins
+    assert e.merge("owner_name", "Cathlyn", 0.5) is False
+    assert e.merge("owner_name", "Kathleen", 0.9) is False
+    assert e.merge("owner_name", "Katherine", 0.95) is True
     assert e.snapshot()["owner_name"] == "Katherine"
     print("extract merge demo ok")
 

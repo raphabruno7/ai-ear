@@ -57,6 +57,14 @@ The listener needs one IAM user with access to **Bedrock** (extraction),
 }
 ```
 
+## Fresh-account activation gates Bedrock AND Transcribe
+
+A newly-created AWS account is in an activation window (minutes to ~24h). During
+it, `smoke_aws.py` returns `ThrottlingException` (Bedrock) and
+`test_transcribe_wiring.py` returns `SubscriptionRequiredException` (Transcribe).
+STS/IAM/SES already work — this is not a permissions problem. Just retry both
+after a few hours; no action needed.
+
 ## Fresh-account Bedrock quota
 
 New AWS accounts get a tiny **daily token quota** on Bedrock (`ThrottlingException:
