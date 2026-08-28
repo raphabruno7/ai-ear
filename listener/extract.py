@@ -18,6 +18,8 @@ from dataclasses import dataclass, field as dc_field
 
 from pydantic import BaseModel
 
+from trace import span
+
 logger = logging.getLogger("copilot-listener.extract")
 
 FIELD_NAMES = [
@@ -138,25 +140,31 @@ class Extractor:
         if not self.model_id:
             return False
         convo = "\n".join(f"{spk}: {txt}" for spk, txt in self._transcript)
-        try:
-            resp = await asyncio.to_thread(
-                self._client().converse,
-                modelId=self.model_id,
-                system=[{"text": _SYSTEM}],
-                messages=[{"role": "user", "content": [{"text": convo}]}],
-                toolConfig={"tools": [_TOOL], "toolChoice": {"tool": {"name": "emit_fields"}}},
-                inferenceConfig={"maxTokens": 400, "temperature": 0},
-            )
-        except Exception as e:  # throttling during new-account window, transient 5xx
-            logger.warning("bedrock extract skipped: %s", e)
-            return False
+        with span("extract_turn", input=convo) as sp:
+            try:
+                resp = await asyncio.to_thread(
+                    self._client().converse,
+                    modelId=self.model_id,
+                    system=[{"text": _SYSTEM}],
+                    messages=[{"role": "user", "content": [{"text": convo}]}],
+                    toolConfig={"tools": [_TOOL], "toolChoice": {"tool": {"name": "emit_fields"}}},
+                    inferenceConfig={"maxTokens": 400, "temperature": 0},
+                )
+            except Exception as e:  # throttling during new-account window, transient 5xx
+                logger.warning("bedrock extract skipped: %s", e)
+                sp.update(level="WARNING", status_message=str(e))
+                return False
 
-        usage = resp.get("usage", {})
-        self._in_tokens += usage.get("inputTokens", 0)
-        self._out_tokens += usage.get("outputTokens", 0)
-
-        emitted = _parse_emitted(resp)
-        latency_ms = int((time.monotonic() - turn_ts) * 1000)
+            usage = resp.get("usage", {})
+            self._in_tokens += usage.get("inputTokens", 0)
+            self._out_tokens += usage.get("outputTokens", 0)
+            emitted = _parse_emitted(resp)
+            latency_ms = int((time.monotonic() - turn_ts) * 1000)
+            sp.update(output=emitted, metadata={
+                "input_tokens": usage.get("inputTokens", 0),
+                "output_tokens": usage.get("outputTokens", 0),
+                "latency_ms": latency_ms,
+            })
 
         changed = False
         for f in emitted:
@@ -171,6 +179,8 @@ class Extractor:
 
     async def flush(self) -> None:
         """Write accumulated per-call cost."""
+        from trace import flush as trace_flush
+        trace_flush()
         if not self.supabase or not self.session_id:
             return
         try:
