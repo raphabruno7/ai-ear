@@ -1,0 +1,25 @@
+{"id": "n01", "kind": "name", "voice": "Samantha", "expected": "Kathleen O'Brien", "text": "My name is Kathleen O'Brien."}
+{"id": "n02", "kind": "name", "voice": "Moira", "expected": "Siobhan Gallagher", "text": "It's Siobhan Gallagher. Siobhan is spelled S I O B H A N."}
+{"id": "n03", "kind": "name", "voice": "Daniel", "expected": "Geoffrey Weisz", "text": "Geoffrey Weisz. G E O F F R E Y, and the last name W E I S Z."}
+{"id": "n04", "kind": "name", "voice": "Samantha", "expected": "Aoife Ní Bhraonáin", "text": "My name is Aoife Ní Bhraonáin."}
+{"id": "n05", "kind": "name", "voice": "Karen", "expected": "Nguyen Thi Hoa", "text": "Nguyen Thi Hoa. The family name is Nguyen, N G U Y E N."}
+{"id": "n06", "kind": "name", "voice": "Rishi", "expected": "Priya Rajagopalan", "text": "This is Priya Rajagopalan."}
+{"id": "n07", "kind": "name", "voice": "Samantha", "expected": "Michał Wojciechowski", "text": "Michał Wojciechowski. That's a Polish name."}
+{"id": "n08", "kind": "name", "voice": "Daniel", "expected": "Zoë Featherstonehaugh", "text": "Zoë Featherstonehaugh. The surname is pronounced Fanshaw but spelled F E A T H E R S T O N E H A U G H."}
+{"id": "n09", "kind": "name", "voice": "Samantha", "expected": "DeShawn Jackson", "text": "DeShawn Jackson. Capital D, capital S, DeShawn."}
+{"id": "n10", "kind": "name", "voice": "Tessa", "expected": "Katharine Hepburn-Clarke", "text": "Katharine Hepburn-Clarke, Katharine with two A's, hyphenated last name."}
+{"id": "n11", "kind": "name", "voice": "Samantha", "expected": "Xiuying Zhang", "text": "My name is Xiuying Zhang."}
+{"id": "n12", "kind": "name", "voice": "Moira", "expected": "Seán Mac Cárthaigh", "text": "Seán Mac Cárthaigh."}
+{"id": "n13", "kind": "name", "voice": "Daniel", "expected": "Rhys Llewellyn", "text": "Rhys Llewellyn. R H Y S, then double L Llewellyn."}
+{"id": "n14", "kind": "name", "voice": "Samantha", "expected": "Björn Andersson", "text": "Björn Andersson, with an umlaut over the O."}
+{"id": "n15", "kind": "name", "voice": "Karen", "expected": "Charlotte Cholmondeley", "text": "Charlotte Cholmondeley. It's pronounced Chumley but spelled C H O L M O N D E L E Y."}
+{"id": "e01", "kind": "email", "voice": "Samantha", "expected": "kathleen.obrien@gmail.com", "text": "kathleen dot o brien at gmail dot com"}
+{"id": "e02", "kind": "email", "voice": "Daniel", "expected": "g.weisz2@outlook.com", "text": "g dot weisz two at outlook dot com"}
+{"id": "e03", "kind": "email", "voice": "Karen", "expected": "s_gallagher@yahoo.co.uk", "text": "s underscore gallagher at yahoo dot co dot uk"}
+{"id": "e04", "kind": "email", "voice": "Samantha", "expected": "priya.raj@protonmail.com", "text": "priya dot raj at proton mail dot com"}
+{"id": "e05", "kind": "email", "voice": "Rishi", "expected": "hoa.nguyen87@gmail.com", "text": "hoa dot nguyen eighty seven at gmail dot com"}
+{"id": "e06", "kind": "email", "voice": "Moira", "expected": "sean.maccarthy@icloud.com", "text": "sean dot mac carthy at icloud dot com"}
+{"id": "e07", "kind": "email", "voice": "Daniel", "expected": "r.llewellyn-jones@company.io", "text": "r dot llewellyn hyphen jones at company dot i o"}
+{"id": "e08", "kind": "email", "voice": "Samantha", "expected": "deshawn.j@gmail.com", "text": "d e s h a w n dot j at gmail dot com"}
+{"id": "e09", "kind": "email", "voice": "Tessa", "expected": "k.hepburn.clarke@nhs.net", "text": "k dot hepburn dot clarke at n h s dot net"}
+{"id": "e10", "kind": "email", "voice": "Samantha", "expected": "xzhang@stanford.edu", "text": "x zhang at stanford dot e d u"}
