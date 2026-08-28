@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 // Protect the dashboard. Cloned from voice-demo: cookie `admin_token` must equal
 // ADMIN_SECRET; fail-open when ADMIN_SECRET is unset (local dev).
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   if (pathname.startsWith("/login") || pathname.startsWith("/api")) {

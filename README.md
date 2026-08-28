@@ -40,13 +40,14 @@ AWS SES ──► pre-visit briefing email (daily cron)
 - [x] **Fase 0** — scaffold, migrations, `.env.example`, AWS setup guide
 - [~] **Fase 1** — listener + AWS Transcribe streaming — code done, LiveKit wiring verified; Transcribe call blocked on new-account activation
 - [~] **Fase 2** — incremental Bedrock extraction — code done (forced tool, merge, persist, cost); blocked on AWS activation
-- [ ] **Fase 3** — Langfuse tracing *(blocked: Langfuse keys)*
+- [~] **Fase 3** — Langfuse tracing — `listener/trace.py` wired into extract + eval (no-ops without keys)
 - [ ] **Fase 4** — SES briefing (cron)
 - [~] **Fase 5** — golden-set A/B eval — metrics + 25-sample dataset + harness done; runs once AWS + `GEMINI_API_KEY`
 - [x] **Fase 6** — Chrome extension + demo-scheduler + WS fan-out (demo via `listener/ws_push.py`)
-- [ ] **Fase 7** — load test + isolation
-- [ ] **Fase 8** — cost tracking + optimisation writeup
-- [ ] **Fase 9** — README numbers + interview writeup
+- [~] **Fase 7** — load test — `loadtest/run.py`; N-room LiveKit concurrency verified, extraction/isolation pending AWS
+- [~] **Fase 8** — cost tracking — per-call accumulator + `/costs` dashboard done; `OPTIMIZATION.md` pending
+- [x] **Dashboard** — `/` sessions · `/session/[id]` · `/eval` · `/costs` (reads Supabase)
+- [ ] **Fase 9** — real numbers + interview writeup
 
 Full plan: `~/.claude/plans/crie-um-plano-de-witty-pond.md`
 
