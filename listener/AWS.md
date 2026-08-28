@@ -57,6 +57,15 @@ The listener needs one IAM user with access to **Bedrock** (extraction),
 }
 ```
 
+## Fresh-account Bedrock quota
+
+New AWS accounts get a tiny **daily token quota** on Bedrock (`ThrottlingException:
+Too many tokens per day` on the first call). It lifts automatically within ~24h of
+account activity. To raise it sooner: **Service Quotas → Amazon Bedrock →** search the
+per-model "tokens per day" / "tokens per minute" quotas → request increase.
+`smoke_aws.py` returning `ThrottlingException` means auth + model access are already
+working — only the volume cap is in the way.
+
 ## 5. Billing alert (do this)
 - Console → **Billing → Budgets** → create a **$10 monthly cost budget** with an
   email alert at 50% and 100%. Cheap insurance against a runaway loop.
