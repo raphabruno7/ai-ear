@@ -11,6 +11,7 @@ latency_ms, and POSTs them to the web dashboard. `@observe` (Langfuse) goes on
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from dataclasses import dataclass, field as dc_field
@@ -18,6 +19,45 @@ from dataclasses import dataclass, field as dc_field
 from pydantic import BaseModel
 
 logger = logging.getLogger("copilot-listener.extract")
+
+FIELD_NAMES = [
+    "owner_name", "owner_phone", "owner_email",
+    "pet_name", "visit_type", "preferred_time", "clinical_notes",
+]
+
+_SYSTEM = (
+    "You are a silent copilot listening to a live call between a veterinary care "
+    "coordinator and a pet owner. Extract appointment and clinical fields from the "
+    "transcript so far. Call emit_fields with every field you are reasonably sure of. "
+    "Use proper formatting: names with real spelling and capitalisation; emails as "
+    "valid addresses, expanding spoken 'at' / 'dot' / 'underscore' / 'hyphen'; phone "
+    "as digits. Only include a field the transcript actually supports. confidence is 0..1."
+)
+
+_TOOL = {
+    "toolSpec": {
+        "name": "emit_fields",
+        "description": "Report the currently-known appointment/clinical fields.",
+        "inputSchema": {"json": {
+            "type": "object",
+            "properties": {
+                "fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string", "enum": FIELD_NAMES},
+                            "value": {"type": "string"},
+                            "confidence": {"type": "number"},
+                        },
+                        "required": ["name", "value", "confidence"],
+                    },
+                }
+            },
+            "required": ["fields"],
+        }},
+    }
+}
 
 
 class AppointmentFields(BaseModel):
@@ -47,6 +87,10 @@ class Extractor:
     ws_broadcast: "callable | None" = None     # async (session_id, fields_dict) -> None
     _transcript: list[tuple[str, str]] = dc_field(default_factory=list)
     _state: dict[str, _FieldState] = dc_field(default_factory=dict)
+    _bedrock: "object | None" = None
+    _in_tokens: int = 0
+    _out_tokens: int = 0
+    _stt_seconds: float = 0.0
 
     def merge(self, name: str, value: str, confidence: float) -> bool:
         """Returns True if the field changed (new or higher-confidence value)."""
@@ -84,14 +128,74 @@ class Extractor:
             "latency_ms": latency_ms,
         }).execute()
 
+    def _client(self):
+        if self._bedrock is None:
+            import boto3
+            self._bedrock = boto3.client("bedrock-runtime", region_name=self.region)
+        return self._bedrock
+
     async def _extract(self, turn_ts: float) -> bool:
-        # Fase 2: Bedrock converse over self._transcript -> emitted fields ->
-        # self.merge(...) -> self._persist(...) with
-        # latency_ms = int((time.monotonic() - turn_ts) * 1000)
-        return False
+        if not self.model_id:
+            return False
+        convo = "\n".join(f"{spk}: {txt}" for spk, txt in self._transcript)
+        try:
+            resp = await asyncio.to_thread(
+                self._client().converse,
+                modelId=self.model_id,
+                system=[{"text": _SYSTEM}],
+                messages=[{"role": "user", "content": [{"text": convo}]}],
+                toolConfig={"tools": [_TOOL], "toolChoice": {"tool": {"name": "emit_fields"}}},
+                inferenceConfig={"maxTokens": 400, "temperature": 0},
+            )
+        except Exception as e:  # throttling during new-account window, transient 5xx
+            logger.warning("bedrock extract skipped: %s", e)
+            return False
+
+        usage = resp.get("usage", {})
+        self._in_tokens += usage.get("inputTokens", 0)
+        self._out_tokens += usage.get("outputTokens", 0)
+
+        emitted = _parse_emitted(resp)
+        latency_ms = int((time.monotonic() - turn_ts) * 1000)
+
+        changed = False
+        for f in emitted:
+            name, value, conf = f.get("name"), (f.get("value") or "").strip(), float(f.get("confidence", 0))
+            if name in FIELD_NAMES and value and self.merge(name, value, conf):
+                changed = True
+                await self._persist(name, value, conf, latency_ms)
+        return changed
+
+    def add_stt_seconds(self, seconds: float) -> None:
+        self._stt_seconds += seconds
 
     async def flush(self) -> None:
-        pass
+        """Write accumulated per-call cost."""
+        if not self.supabase or not self.session_id:
+            return
+        try:
+            import pricing
+            usd_stt = pricing.stt_cost(self._stt_seconds)
+            usd_llm = pricing.llm_cost(self._in_tokens, self._out_tokens)
+            self.supabase.table("call_costs").upsert({
+                "session_id": self.session_id,
+                "stt_seconds": round(self._stt_seconds, 2),
+                "llm_input_tokens": self._in_tokens,
+                "llm_output_tokens": self._out_tokens,
+                "usd_stt": round(usd_stt, 5),
+                "usd_llm": round(usd_llm, 5),
+                "usd_total": round(usd_stt + usd_llm, 5),
+                "updated_at": "now()",
+            }).execute()
+        except Exception as e:  # noqa: BLE001
+            logger.warning("cost flush failed: %s", e)
+
+
+def _parse_emitted(resp: dict) -> list[dict]:
+    for block in resp.get("output", {}).get("message", {}).get("content", []):
+        if "toolUse" in block:
+            return block["toolUse"]["input"].get("fields", [])
+    return []
 
 
 def demo() -> None:
@@ -101,7 +205,18 @@ def demo() -> None:
     assert e.merge("owner_name", "Kathleen", 0.9) is False
     assert e.merge("owner_name", "Katherine", 0.95) is True
     assert e.snapshot()["owner_name"] == "Katherine"
-    print("extract merge demo ok")
+
+    resp = {"output": {"message": {"content": [
+        {"text": "ok"},
+        {"toolUse": {"name": "emit_fields", "input": {"fields": [
+            {"name": "owner_name", "value": "Kathleen O'Brien", "confidence": 0.9},
+            {"name": "pet_name", "value": "Luna", "confidence": 0.8},
+        ]}}},
+    ]}}}
+    got = _parse_emitted(resp)
+    assert [f["name"] for f in got] == ["owner_name", "pet_name"], got
+    assert _parse_emitted({"output": {"message": {"content": [{"text": "hi"}]}}}) == []
+    print("extract demo ok")
 
 
 if __name__ == "__main__":

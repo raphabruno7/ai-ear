@@ -100,10 +100,10 @@ async def run_listener(room_name: str, vcc_id: str, language: str) -> str:
     await done.wait()
     for ts in sessions.values():
         await ts.close()
+    total_audio = sum(ts.audio_seconds for ts in sessions.values())
+    extractor.add_stt_seconds(total_audio)
     await extractor.flush()
     await fields_ws.stop()
-
-    total_audio = sum(ts.audio_seconds for ts in sessions.values())
     sb.table("sessions").update({"ended_at": "now()"}).eq("id", session_id).execute()
     logger.info("session %s ended — %.1fs audio, %d turns, fields=%s",
                 session_id, total_audio, len(extractor.turns), extractor.snapshot())
