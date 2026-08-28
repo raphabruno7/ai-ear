@@ -4,7 +4,7 @@ Fills a scheduling form live from the copilot's extracted fields.
 
 ## Load it
 1. `chrome://extensions` → enable Developer mode → **Load unpacked** → select this folder.
-2. Click the extension icon → set **WebSocket URL** (`ws://localhost:3000/api/ws`) and
+2. Click the extension icon → set **WebSocket URL** (`ws://localhost:8765`) and
    **Session ID** (the LiveKit room name) → **Connect**. Badge shows ● when live.
 3. Open `http://localhost:3000/demo-scheduler` — inputs fill as fields arrive.
 

@@ -5,7 +5,7 @@
 //   { type: "fields", session_id, fields: { owner_name, owner_email, ... } }
 
 let ws = null;
-let cfg = { wsUrl: "ws://localhost:3000/api/ws", sessionId: "" };
+let cfg = { wsUrl: "ws://localhost:8765", sessionId: "" };
 
 async function loadCfg() {
   const s = await chrome.storage.local.get(["wsUrl", "sessionId"]);

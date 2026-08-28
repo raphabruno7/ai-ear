@@ -23,6 +23,7 @@ from livekit import rtc
 from extract import Extractor
 from lktoken import listener_token
 from transcribe_stream import TranscribeSession
+from ws_server import FieldsWS
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -30,6 +31,8 @@ logger = logging.getLogger("copilot-listener")
 
 REGION = os.environ.get("AWS_REGION", "us-east-1")
 LIVEKIT_URL = os.environ["LIVEKIT_URL"]
+BEDROCK_MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "")
+WS_PORT = int(os.environ.get("FIELDS_WS_PORT", 8765))
 
 
 def _supabase():
@@ -46,7 +49,18 @@ async def run_listener(room_name: str, vcc_id: str, language: str) -> str:
     session_id = row["id"]
     logger.info("session %s (room=%s vcc=%s)", session_id, room_name, vcc_id)
 
-    extractor = Extractor(room_name=room_name)
+    fields_ws = FieldsWS(port=WS_PORT)
+    await fields_ws.start()
+
+    extractor = Extractor(
+        room_name=room_name,
+        session_id=session_id,
+        vcc_id=vcc_id,
+        region=REGION,
+        model_id=BEDROCK_MODEL_ID,
+        supabase=sb,
+        ws_broadcast=fields_ws.broadcast,
+    )
     sessions: dict[str, TranscribeSession] = {}
     done = asyncio.Event()
     room = rtc.Room()
@@ -87,6 +101,7 @@ async def run_listener(room_name: str, vcc_id: str, language: str) -> str:
     for ts in sessions.values():
         await ts.close()
     await extractor.flush()
+    await fields_ws.stop()
 
     total_audio = sum(ts.audio_seconds for ts in sessions.values())
     sb.table("sessions").update({"ended_at": "now()"}).eq("id", session_id).execute()

@@ -2,7 +2,7 @@ const $ = (id) => document.getElementById(id);
 
 async function load() {
   const s = await chrome.storage.local.get(["wsUrl", "sessionId", "lastFields"]);
-  $("wsUrl").value = s.wsUrl || "ws://localhost:3000/api/ws";
+  $("wsUrl").value = s.wsUrl || "ws://localhost:8765";
   $("sessionId").value = s.sessionId || "";
   renderFields(s.lastFields || {});
 }

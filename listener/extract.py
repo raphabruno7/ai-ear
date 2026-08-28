@@ -39,9 +39,12 @@ class _FieldState:
 @dataclass
 class Extractor:
     room_name: str
-    web_base_url: str = ""
-    fields_secret: str = ""
-    on_field_change: "callable | None" = None  # (name, value, confidence, latency_ms) -> Awaitable
+    session_id: str = ""
+    vcc_id: str = "vcc-1"
+    region: str = "us-east-1"
+    model_id: str = ""
+    supabase: "object | None" = None          # supabase client (persist changed fields)
+    ws_broadcast: "callable | None" = None     # async (session_id, fields_dict) -> None
     _transcript: list[tuple[str, str]] = dc_field(default_factory=list)
     _state: dict[str, _FieldState] = dc_field(default_factory=dict)
 
@@ -64,13 +67,28 @@ class Extractor:
         self._transcript.append((speaker, text))
         logger.info("[%s] %s", speaker, text)
         turn_ts = time.monotonic()
-        await self._extract(turn_ts)
+        changed = await self._extract(turn_ts)
+        if changed and self.ws_broadcast:
+            await self.ws_broadcast(self.session_id, self.snapshot())
 
-    async def _extract(self, turn_ts: float) -> None:
+    async def _persist(self, name: str, value: str, confidence: float, latency_ms: int) -> None:
+        if not self.supabase or not self.session_id:
+            return
+        self.supabase.table("extracted_fields").insert({
+            "session_id": self.session_id,
+            "vcc_id": self.vcc_id,
+            "field_name": name,
+            "field_value": value,
+            "confidence": confidence,
+            "model": self.model_id or "bedrock-haiku",
+            "latency_ms": latency_ms,
+        }).execute()
+
+    async def _extract(self, turn_ts: float) -> bool:
         # Fase 2: Bedrock converse over self._transcript -> emitted fields ->
-        # self.merge(...) -> for each changed field, persist + notify with
-        # latency_ms = (time.monotonic() - turn_ts) * 1000
-        return
+        # self.merge(...) -> self._persist(...) with
+        # latency_ms = int((time.monotonic() - turn_ts) * 1000)
+        return False
 
     async def flush(self) -> None:
         pass
