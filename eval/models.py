@@ -64,21 +64,47 @@ def extract_bedrock(transcript: str, kind: str) -> str:
     resp = br.converse(
         modelId=model_id,
         messages=[{"role": "user", "content": [{"text": _PROMPT.format(kind=kind, transcript=transcript)}]}],
-        inferenceConfig={"maxTokens": 60, "temperature": 0},
+        inferenceConfig={"maxTokens": 100, "temperature": 0},
     )
-    return resp["output"]["message"]["content"][0]["text"].strip()
+    return _clean(resp["output"]["message"]["content"][0]["text"].strip())
 
 
 def extract_gemini(transcript: str, kind: str) -> str:
+    import time
+
     from google import genai
+    from google.genai import types
 
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-    resp = client.models.generate_content(
-        model=os.environ.get("GEMINI_MODEL_ID", "gemini-2.5-flash"),
-        contents=_PROMPT.format(kind=kind, transcript=transcript),
-        config={"temperature": 0, "max_output_tokens": 60},
-    )
-    return (resp.text or "").strip()
+    # Gemini 3.x counts thinking tokens against max_output_tokens and rejects
+    # thinking_budget=0 for flash — so just give it ample room.
+    cfg = types.GenerateContentConfig(temperature=0, max_output_tokens=2000)
+    model = os.environ.get("GEMINI_MODEL_ID", "gemini-3.6-flash")
+    prompt = _PROMPT.format(kind=kind, transcript=transcript)
+
+    last: Exception | None = None
+    for attempt in range(4):
+        try:
+            resp = client.models.generate_content(model=model, contents=prompt, config=cfg)
+            return _clean((resp.text or "").strip())
+        except Exception as e:
+            last = e
+            r = repr(e)
+            if "429" in r or "RESOURCE_EXHAUSTED" in r:
+                time.sleep(30 * (attempt + 1))  # free-tier RPM/RPD limits
+            elif "503" in r or "UNAVAILABLE" in r:
+                time.sleep(3 * (attempt + 1))
+            else:
+                raise
+    raise last  # type: ignore[misc]
+
+
+def _clean(s: str) -> str:
+    s = s.strip().strip("`").strip('"').strip("'").strip()
+    for pre in ("the name is", "the email is", "name:", "email:", "answer:"):
+        if s.lower().startswith(pre):
+            s = s[len(pre):].strip()
+    return s.splitlines()[0].strip() if s else s
 
 
 EXTRACTORS = {"bedrock-haiku": extract_bedrock, "gemini-flash": extract_gemini}

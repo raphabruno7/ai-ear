@@ -27,10 +27,12 @@ FIX = Path(__file__).parent / "fixtures"
 FRAME_MS = 10
 
 
-async def publish_track(room_name: str, identity: str, wav_path: Path) -> None:
+async def publish_track(room_name: str, identity: str, wav_path: Path, seconds: float | None = None) -> None:
     with wave.open(str(wav_path)) as w:
         assert w.getframerate() == 16_000 and w.getnchannels() == 1
         pcm = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16)
+    if seconds:
+        pcm = pcm[: int(seconds * 16_000)]
 
     room = rtc.Room()
     await room.connect(LIVEKIT_URL, publisher_token(room_name, identity))
@@ -59,13 +61,14 @@ async def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--room", required=True)
     ap.add_argument("--track", choices=["vcc", "family", "both"], default="both")
+    ap.add_argument("--seconds", type=float, default=None)
     args = ap.parse_args()
 
     jobs = []
     if args.track in ("vcc", "both"):
-        jobs.append(publish_track(args.room, "vcc", FIX / "vcc.wav"))
+        jobs.append(publish_track(args.room, "vcc", FIX / "vcc.wav", args.seconds))
     if args.track in ("family", "both"):
-        jobs.append(publish_track(args.room, "family", FIX / "family.wav"))
+        jobs.append(publish_track(args.room, "family", FIX / "family.wav", args.seconds))
     await asyncio.gather(*jobs)
 
 

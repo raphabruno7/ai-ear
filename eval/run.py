@@ -45,6 +45,7 @@ async def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--models", nargs="+", default=list(EXTRACTORS), choices=list(EXTRACTORS))
     ap.add_argument("--limit", type=int)
+    ap.add_argument("--sleep", type=float, default=0, help="seconds between samples (free-tier pacing)")
     args = ap.parse_args()
 
     rows = [json.loads(l) for l in SAMPLES.read_text().splitlines() if l.strip()]
@@ -63,7 +64,11 @@ async def main() -> None:
         transcript = await transcribe_file(str(wav), REGION)
         for model in args.models:
             with span(f"eval:{model}", input={"transcript": transcript, "kind": s["kind"]}) as sp:
-                got = EXTRACTORS[model](transcript, s["kind"])
+                try:
+                    got = EXTRACTORS[model](transcript, s["kind"])
+                except Exception as e:  # one bad call must not kill the run
+                    got = ""
+                    print(f"  {s['id']:>4} {model:<13} ERROR {e!r}"[:160])
                 sp.update(output=got, metadata={"expected": s["expected"], "sample": s["id"]})
             sc = score(s["expected"], got, s["kind"])
             rec = {"run_id": run_id, "model": model, "sample_id": s["id"], "kind": s["kind"],
@@ -73,6 +78,8 @@ async def main() -> None:
                   f"exp={s['expected']!r} got={got!r}")
             if sb:
                 sb.table("eval_runs").insert(rec).execute()
+        if args.sleep:
+            await asyncio.sleep(args.sleep)
 
     trace_flush()
     _report(run_id, args.models, results)
