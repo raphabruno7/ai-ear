@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { percentile, fmtUSD } from "@/lib/stats";
+import { Stat } from "@/components/stat";
 
 export const dynamic = "force-dynamic";
 
@@ -13,27 +14,59 @@ type Field = {
   extracted_at: string;
 };
 
+type Session = { room_name: string; vcc_id: string; started_at: string; ended_at: string | null };
+type Cost = { usd_total: number } | null;
+
 export default async function SessionPage({ params }: PageProps<"/session/[id]">) {
   const { id } = await params;
-  const sb = getSupabaseAdmin();
 
-  const { data: session } = await sb.from("sessions").select("*").eq("id", id).maybeSingle();
+  let session: Session | null = null;
+  let rows: Field[] = [];
+  let cost: Cost = null;
+  let error: string | null = null;
+
+  try {
+    const sb = getSupabaseAdmin();
+    const s = await sb
+      .from("sessions")
+      .select("room_name, vcc_id, started_at, ended_at")
+      .eq("id", id)
+      .maybeSingle()
+      .throwOnError();
+    session = s.data;
+
+    if (session) {
+      const f = await sb
+        .from("extracted_fields")
+        .select("field_name, field_value, confidence, model, latency_ms, extracted_at")
+        .eq("session_id", id)
+        .order("extracted_at", { ascending: true })
+        .throwOnError();
+      rows = f.data ?? [];
+
+      const c = await sb.from("call_costs").select("usd_total").eq("session_id", id).maybeSingle().throwOnError();
+      cost = c.data;
+    }
+  } catch (e) {
+    error = e instanceof Error ? e.message : String(e);
+  }
+
+  if (error) {
+    return (
+      <div>
+        <h1 className="text-lg font-semibold">Session</h1>
+        <p className="mt-4 text-sm text-red-600">Supabase: {error}</p>
+      </div>
+    );
+  }
   if (!session) notFound();
 
-  const { data: fieldRows } = await sb
-    .from("extracted_fields")
-    .select("field_name, field_value, confidence, model, latency_ms, extracted_at")
-    .eq("session_id", id)
-    .order("extracted_at", { ascending: true });
-  const rows: Field[] = fieldRows ?? [];
-
-  // latest row per field_name
   const latest = new Map<string, Field>();
   for (const r of rows) latest.set(r.field_name, r);
-
-  const lat = rows.map((r) => r.latency_ms).filter((n): n is number => n != null).sort((a, b) => a - b);
-
-  const { data: cost } = await sb.from("call_costs").select("*").eq("session_id", id).maybeSingle();
+  const lat = rows
+    .map((r) => r.latency_ms)
+    .filter((n): n is number => n != null)
+    .sort((a, b) => a - b);
 
   return (
     <div>
@@ -65,19 +98,14 @@ export default async function SessionPage({ params }: PageProps<"/session/[id]">
 
       <section className="mt-6 grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
         <Stat label="Field updates" value={String(rows.length)} />
-        <Stat label="Extraction p50" value={percentile(lat, 0.5) != null ? `${percentile(lat, 0.5)} ms` : "—"} />
-        <Stat label="Extraction p95" value={percentile(lat, 0.95) != null ? `${percentile(lat, 0.95)} ms` : "—"} />
+        <Stat label="Extraction p50" value={fmtMs(percentile(lat, 0.5))} />
+        <Stat label="Extraction p95" value={fmtMs(percentile(lat, 0.95))} />
         <Stat label="Call cost" value={cost ? fmtUSD(Number(cost.usd_total)) : "—"} />
       </section>
     </div>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
-      <div className="text-xs text-zinc-500">{label}</div>
-      <div className="mt-1 text-base font-semibold">{value}</div>
-    </div>
-  );
+function fmtMs(n: number | null): string {
+  return n != null ? `${n} ms` : "—";
 }

@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { fmtUSD } from "@/lib/stats";
+import { Stat } from "@/components/stat";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,7 @@ export default async function CostsPage() {
   let rows: Cost[] = [];
   let error: string | null = null;
   try {
-    const { data } = await getSupabaseAdmin().from("call_costs").select("*").limit(1000);
+    const { data } = await getSupabaseAdmin().from("call_costs").select("*").limit(1000).throwOnError();
     rows = data ?? [];
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
@@ -77,15 +78,6 @@ export default async function CostsPage() {
           </table>
         </>
       )}
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
-      <div className="text-xs text-zinc-500">{label}</div>
-      <div className="mt-1 text-base font-semibold">{value}</div>
     </div>
   );
 }

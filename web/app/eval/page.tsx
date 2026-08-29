@@ -23,7 +23,8 @@ export default async function EvalPage() {
       .from("eval_runs")
       .select("*")
       .order("created_at", { ascending: false })
-      .limit(2000);
+      .limit(2000)
+      .throwOnError();
     rows = data ?? [];
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
@@ -51,7 +52,8 @@ export default async function EvalPage() {
     <div>
       <h1 className="text-lg font-semibold">Eval — phonetic name / email accuracy</h1>
       <p className="mt-1 text-sm text-zinc-500">
-        {latestRun ? `Latest run ${latestRun}` : "No runs yet"} · Claude Haiku (Bedrock) vs Gemini 2.5 Flash
+        {error ? "" : latestRun ? `Latest run ${latestRun} · ` : "No runs yet · "}
+        Claude Haiku (Bedrock) vs Gemini 2.5 Flash
       </p>
 
       {error && <p className="mt-4 text-sm text-red-600">Supabase: {error}</p>}

@@ -19,7 +19,8 @@ export default async function SessionsPage() {
       .from("sessions")
       .select("id, room_name, vcc_id, started_at, ended_at")
       .order("started_at", { ascending: false })
-      .limit(50);
+      .limit(50)
+      .throwOnError();
     sessions = data ?? [];
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
