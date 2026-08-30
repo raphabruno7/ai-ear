@@ -68,6 +68,14 @@ export default async function SessionPage({ params }: PageProps<"/session/[id]">
     .filter((n): n is number => n != null)
     .sort((a, b) => a - b);
 
+  // agent-assist metric: how fast the copilot gets fields onto the VCC's screen
+  const start = new Date(session.started_at).getTime();
+  const times = rows.map((r) => new Date(r.extracted_at).getTime()).sort((a, b) => a - b);
+  const secsFromStart = (t: number | undefined) =>
+    t != null ? Math.round((t - start) / 1000) : null;
+  const timeToFirst = secsFromStart(times[0]);
+  const timeToAll = secsFromStart(times[times.length - 1]);
+
   return (
     <div>
       <h1 className="font-mono text-lg font-semibold">{session.room_name}</h1>
@@ -96,8 +104,10 @@ export default async function SessionPage({ params }: PageProps<"/session/[id]">
         )}
       </section>
 
-      <section className="mt-6 grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
-        <Stat label="Field updates" value={String(rows.length)} />
+      <section className="mt-6 grid grid-cols-2 gap-4 text-sm sm:grid-cols-3 lg:grid-cols-6">
+        <Stat label="Fields on screen" value={`${latest.size}/7`} />
+        <Stat label="Time to first field" value={timeToFirst != null ? `${timeToFirst}s` : "—"} />
+        <Stat label="Time to all fields" value={timeToAll != null ? `${timeToAll}s` : "—"} />
         <Stat label="Extraction p50" value={fmtMs(percentile(lat, 0.5))} />
         <Stat label="Extraction p95" value={fmtMs(percentile(lat, 0.95))} />
         <Stat label="Call cost" value={cost ? fmtUSD(Number(cost.usd_total)) : "—"} />

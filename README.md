@@ -45,9 +45,11 @@ AWS SES ──► pre-visit briefing email (daily cron)
 - [~] **Fase 5** — golden-set A/B eval — metrics + 25-sample dataset + harness done; runs once AWS + `GEMINI_API_KEY`
 - [x] **Fase 6** — Chrome extension + demo-scheduler + WS fan-out (demo via `listener/ws_push.py`)
 - [~] **Fase 7** — load test — `loadtest/run.py`; N-room LiveKit concurrency verified, extraction/isolation pending AWS
-- [~] **Fase 8** — cost tracking — per-call accumulator + `/costs` dashboard done; `OPTIMIZATION.md` pending
-- [x] **Dashboard** — `/` sessions · `/session/[id]` · `/eval` · `/costs` (reads Supabase)
-- [ ] **Fase 9** — real numbers + interview writeup
+- [x] **Fase 8** — cost tracking + debounce + `OPTIMIZATION.md`
+- [x] **Dashboard** — `/` · `/session/[id]` (fields, time-to-fields, latency, cost) · `/eval` · `/costs` · `/api/health`
+- [x] **Incident handling** — `HEALTH.md` runbook, `/api/health`, `listener/healthcheck.py`
+- [x] **RLS policies** — `005_rls_policies.sql` (per-`vcc_id`)
+- [x] **Fase 9** — `INTERVIEW.md` (requirement → evidence + real numbers)
 
 Full plan: `~/.claude/plans/crie-um-plano-de-witty-pond.md`
 
