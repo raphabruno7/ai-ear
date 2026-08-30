@@ -58,8 +58,9 @@ AWS SES ──► pre-visit briefing email (per session)
 - **Per-call cost model:** ≈ $0.26 for an 8-min call — $0.19 Transcribe +
   $0.07 Bedrock Haiku (`pricing.py`, self-checked; real `call_costs` rows for
   the STT leg).
-- **Concurrency:** 3 LiveKit rooms opened in parallel, ~9–12 s wall each,
-  cross-session isolation assert passes.
+- **Concurrency:** 6 LiveKit rooms opened in parallel — all connect + publish,
+  no failures, wall 14–19 s each, cross-session data-isolation assert passes.
+  (Job bar: 5–10+ concurrent calls.)
 - **Eval — Gemini 3.6 Flash, 25 samples:** names 40% exact / 60% phonetic,
   emails ~40%. **Every miss is AWS Transcribe (en-US) mangling non-English
   phonemes** — "Aoife Ní Bhraonáin" → "Aoife Ibra Oman", "Seán Mac Cárthaigh" →
