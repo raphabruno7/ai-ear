@@ -12,7 +12,9 @@ latency_ms, and POSTs them to the web dashboard. `@observe` (Langfuse) goes on
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import os
 import time
 from dataclasses import dataclass, field as dc_field
 
@@ -84,12 +86,18 @@ class Extractor:
     session_id: str = ""
     vcc_id: str = "vcc-1"
     region: str = "us-east-1"
-    model_id: str = ""
-    supabase: "object | None" = None          # supabase client (persist changed fields)
-    ws_broadcast: "callable | None" = None     # async (session_id, fields_dict) -> None
+    model_id: str = ""                          # bedrock model / inference profile id
+    backend: str = "bedrock"                    # "bedrock" | "gemini"
+    gemini_model: str = "gemini-3.6-flash"
+    supabase: "object | None" = None            # supabase client (persist changed fields)
+    ws_broadcast: "callable | None" = None      # async (session_id, fields_dict) -> None
     _transcript: list[tuple[str, str]] = dc_field(default_factory=list)
     _state: dict[str, _FieldState] = dc_field(default_factory=dict)
+    min_extract_gap_s: float = 12.0            # debounce — don't re-extract on every turn
     _bedrock: "object | None" = None
+    _genai: "object | None" = None
+    _last_extract: float = 0.0
+    _turns_since_extract: int = 0
     _in_tokens: int = 0
     _out_tokens: int = 0
     _stt_seconds: float = 0.0
@@ -111,11 +119,26 @@ class Extractor:
 
     async def on_turn(self, speaker: str, text: str) -> None:
         self._transcript.append((speaker, text))
+        self._turns_since_extract += 1
         logger.info("[%s] %s", speaker, text)
-        turn_ts = time.monotonic()
-        changed = await self._extract(turn_ts)
+
+        now = time.monotonic()
+        # debounce: extract once the call has settled a bit, not on every utterance
+        if now - self._last_extract < self.min_extract_gap_s and self._turns_since_extract < 4:
+            return
+        self._last_extract = now
+        self._turns_since_extract = 0
+
+        changed = await self._extract(now)
         if changed and self.ws_broadcast:
             await self.ws_broadcast(self.session_id, self.snapshot())
+
+    async def finalize(self) -> None:
+        """One last extraction over the full transcript at end of call."""
+        if self._transcript:
+            changed = await self._extract(time.monotonic())
+            if changed and self.ws_broadcast:
+                await self.ws_broadcast(self.session_id, self.snapshot())
 
     async def _persist(self, name: str, value: str, confidence: float, latency_ms: int) -> None:
         if not self.supabase or not self.session_id:
@@ -126,49 +149,79 @@ class Extractor:
             "field_name": name,
             "field_value": value,
             "confidence": confidence,
-            "model": self.model_id or "bedrock-haiku",
+            "model": self.backend,
             "latency_ms": latency_ms,
         }).execute()
 
-    def _client(self):
+    def _bedrock_client(self):
         if self._bedrock is None:
             import boto3
             self._bedrock = boto3.client("bedrock-runtime", region_name=self.region)
         return self._bedrock
 
+    def _genai_client(self):
+        if self._genai is None:
+            from google import genai
+            self._genai = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+        return self._genai
+
+    async def _emit_bedrock(self, convo: str) -> list[dict]:
+        resp = await asyncio.to_thread(
+            self._bedrock_client().converse,
+            modelId=self.model_id,
+            system=[{"text": _SYSTEM}],
+            messages=[{"role": "user", "content": [{"text": convo}]}],
+            toolConfig={"tools": [_TOOL], "toolChoice": {"tool": {"name": "emit_fields"}}},
+            inferenceConfig={"maxTokens": 400, "temperature": 0},
+        )
+        usage = resp.get("usage", {})
+        self._in_tokens += usage.get("inputTokens", 0)
+        self._out_tokens += usage.get("outputTokens", 0)
+        return _parse_emitted(resp)
+
+    async def _emit_gemini(self, convo: str) -> list[dict]:
+        from google.genai import types
+
+        prompt = (
+            _SYSTEM + "\n\nTranscript:\n" + convo + "\n\n"
+            "Respond with ONLY a JSON array of objects {name, value, confidence} "
+            f"where name is one of {FIELD_NAMES}. Omit fields not supported by the transcript."
+        )
+        resp = await asyncio.to_thread(
+            self._genai_client().models.generate_content,
+            model=self.gemini_model,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                temperature=0, max_output_tokens=2000, response_mime_type="application/json",
+            ),
+        )
+        u = getattr(resp, "usage_metadata", None)
+        if u:
+            self._in_tokens += getattr(u, "prompt_token_count", 0) or 0
+            self._out_tokens += getattr(u, "candidates_token_count", 0) or 0
+        return _parse_json_fields(resp.text or "")
+
     async def _extract(self, turn_ts: float) -> bool:
-        if not self.model_id:
+        if self.backend == "bedrock" and not self.model_id:
             return False
         convo = "\n".join(f"{spk}: {txt}" for spk, txt in self._transcript)
         with span("extract_turn", input=convo) as sp:
             try:
-                resp = await asyncio.to_thread(
-                    self._client().converse,
-                    modelId=self.model_id,
-                    system=[{"text": _SYSTEM}],
-                    messages=[{"role": "user", "content": [{"text": convo}]}],
-                    toolConfig={"tools": [_TOOL], "toolChoice": {"tool": {"name": "emit_fields"}}},
-                    inferenceConfig={"maxTokens": 400, "temperature": 0},
-                )
-            except Exception as e:  # throttling during new-account window, transient 5xx
-                logger.warning("bedrock extract skipped: %s", e)
+                emit = self._emit_gemini if self.backend == "gemini" else self._emit_bedrock
+                emitted = await emit(convo)
+            except Exception as e:  # throttling / transient 5xx — keep listening
+                logger.warning("%s extract skipped: %s", self.backend, e)
                 sp.update(level="WARNING", status_message=str(e))
                 return False
 
-            usage = resp.get("usage", {})
-            self._in_tokens += usage.get("inputTokens", 0)
-            self._out_tokens += usage.get("outputTokens", 0)
-            emitted = _parse_emitted(resp)
             latency_ms = int((time.monotonic() - turn_ts) * 1000)
-            sp.update(output=emitted, metadata={
-                "input_tokens": usage.get("inputTokens", 0),
-                "output_tokens": usage.get("outputTokens", 0),
-                "latency_ms": latency_ms,
-            })
+            sp.update(output=emitted, metadata={"latency_ms": latency_ms, "backend": self.backend})
 
         changed = False
         for f in emitted:
-            name, value, conf = f.get("name"), (f.get("value") or "").strip(), float(f.get("confidence", 0))
+            name = f.get("name")
+            value = (f.get("value") or "").strip()
+            conf = float(f.get("confidence", 0) or 0)
             if name in FIELD_NAMES and value and self.merge(name, value, conf):
                 changed = True
                 await self._persist(name, value, conf, latency_ms)
@@ -208,6 +261,20 @@ def _parse_emitted(resp: dict) -> list[dict]:
     return []
 
 
+def _parse_json_fields(text: str) -> list[dict]:
+    text = text.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return []
+    if isinstance(data, dict):  # {"fields": [...]} or {name: {value, confidence}}
+        if "fields" in data:
+            return data["fields"]
+        return [{"name": k, **v} if isinstance(v, dict) else {"name": k, "value": v, "confidence": 0.7}
+                for k, v in data.items()]
+    return data if isinstance(data, list) else []
+
+
 def demo() -> None:
     e = Extractor(room_name="t")
     assert e.merge("owner_name", "Kathleen", 0.7) is True
@@ -226,6 +293,12 @@ def demo() -> None:
     got = _parse_emitted(resp)
     assert [f["name"] for f in got] == ["owner_name", "pet_name"], got
     assert _parse_emitted({"output": {"message": {"content": [{"text": "hi"}]}}}) == []
+
+    j = _parse_json_fields('```json\n[{"name":"pet_name","value":"Luna","confidence":0.8}]\n```')
+    assert j == [{"name": "pet_name", "value": "Luna", "confidence": 0.8}], j
+    j2 = _parse_json_fields('{"owner_name": {"value": "Kathleen", "confidence": 0.9}}')
+    assert j2 == [{"name": "owner_name", "value": "Kathleen", "confidence": 0.9}], j2
+    assert _parse_json_fields("not json") == []
     print("extract demo ok")
 
 

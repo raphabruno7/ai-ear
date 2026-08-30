@@ -32,6 +32,8 @@ logger = logging.getLogger("copilot-listener")
 REGION = os.environ.get("AWS_REGION", "us-east-1")
 LIVEKIT_URL = os.environ["LIVEKIT_URL"]
 BEDROCK_MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "")
+EXTRACT_BACKEND = os.environ.get("EXTRACT_BACKEND", "bedrock")  # bedrock | gemini
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL_ID", "gemini-3.6-flash")
 WS_PORT = int(os.environ.get("FIELDS_WS_PORT", 8765))
 
 
@@ -58,9 +60,12 @@ async def run_listener(room_name: str, vcc_id: str, language: str) -> str:
         vcc_id=vcc_id,
         region=REGION,
         model_id=BEDROCK_MODEL_ID,
+        backend=EXTRACT_BACKEND,
+        gemini_model=GEMINI_MODEL,
         supabase=sb,
         ws_broadcast=fields_ws.broadcast,
     )
+    logger.info("extraction backend: %s", EXTRACT_BACKEND)
     sessions: dict[str, TranscribeSession] = {}
     done = asyncio.Event()
     room = rtc.Room()
@@ -99,9 +104,13 @@ async def run_listener(room_name: str, vcc_id: str, language: str) -> str:
 
     await done.wait()
     for ts in sessions.values():
-        await ts.close()
+        try:
+            await ts.close()
+        except Exception:  # noqa: BLE001 — best-effort teardown
+            pass
     total_audio = sum(ts.audio_seconds for ts in sessions.values())
     extractor.add_stt_seconds(total_audio)
+    await extractor.finalize()   # last pass over the whole transcript
     await extractor.flush()
     await fields_ws.stop()
     sb.table("sessions").update({"ended_at": "now()"}).eq("id", session_id).execute()

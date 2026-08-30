@@ -109,4 +109,9 @@ class TranscribeSession:
         self._stopped = True
         await self._safe_end()
         if self._handler_task:
-            self._handler_task.cancel()
+            # let the output stream drain naturally before cancelling — avoids an
+            # awscrt "set_result on CANCELLED future" during teardown
+            try:
+                await asyncio.wait_for(asyncio.shield(self._handler_task), 1.0)
+            except (asyncio.TimeoutError, Exception):
+                self._handler_task.cancel()
