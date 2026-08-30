@@ -1,7 +1,12 @@
 """AWS Transcribe streaming — one instance per human participant's audio track.
 
 The LiveKit AudioStream is created already resampled to 16 kHz mono s16le, so we
-just forward raw PCM chunks to Transcribe and surface stabilised final results.
+forward raw PCM chunks to Transcribe and surface stabilised final results.
+
+Transcribe closes a streaming session on its own after a stretch of silence; the
+LiveKit connection can also drop and resume. Either way the send fails — we
+reopen a fresh Transcribe stream and keep going, so a call survives quiet gaps
+and network blips.
 """
 
 from __future__ import annotations
@@ -42,6 +47,9 @@ class TranscribeSession:
         self.language = language
         self._total_seconds = 0.0
         self._stream = None
+        self._handler_task: asyncio.Task | None = None
+        self._stopped = False
+        self._reopens = 0
 
     @property
     def audio_seconds(self) -> float:
@@ -49,27 +57,56 @@ class TranscribeSession:
 
     async def run(self, audio_stream) -> None:
         """audio_stream: rtc.AudioStream, 16 kHz mono. Returns when the track ends."""
-        client = TranscribeStreamingClient(region=self.region)
-        self._stream = await client.start_stream_transcription(
-            language_code=self.language,
-            media_sample_rate_hz=16_000,
-            media_encoding="pcm",
-        )
-        handler = _Handler(self._stream.output_stream, self.speaker, self.on_final)
-        await asyncio.gather(self._pump(audio_stream), handler.handle_events())
-
-    async def _pump(self, audio_stream) -> None:
+        await self._open()
         try:
             async for ev in audio_stream:
+                if self._stopped:
+                    break
                 frame = ev.frame
                 self._total_seconds += frame.samples_per_channel / frame.sample_rate
-                await self._stream.input_stream.send_audio_event(audio_chunk=bytes(frame.data))
+                for _ in range(2):
+                    try:
+                        await self._stream.input_stream.send_audio_event(audio_chunk=bytes(frame.data))
+                        break
+                    except Exception as e:  # stream closed (silence timeout) or connection blip
+                        if self._stopped:
+                            return
+                        self._reopens += 1
+                        logger.info("transcribe reopen #%d for %s (%s)", self._reopens, self.speaker, e)
+                        await self._open()
         finally:
-            await self._stream.input_stream.end_stream()
+            self._stopped = True
+            await self._safe_end()
+            if self._handler_task:
+                self._handler_task.cancel()
 
-    async def close(self) -> None:
+    async def _open(self) -> None:
+        await self._safe_end()
+        if self._handler_task:
+            self._handler_task.cancel()
+        client = TranscribeStreamingClient(region=self.region)
+        self._stream = await client.start_stream_transcription(
+            language_code=self.language, media_sample_rate_hz=16_000, media_encoding="pcm",
+        )
+        self._handler_task = asyncio.create_task(self._drain())
+
+    async def _drain(self) -> None:
+        try:
+            await _Handler(self._stream.output_stream, self.speaker, self.on_final).handle_events()
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # noqa: BLE001 — stream ended; run()'s send will reopen
+            logger.debug("transcribe output stream ended for %s (%s)", self.speaker, e)
+
+    async def _safe_end(self) -> None:
         if self._stream is not None:
             try:
                 await self._stream.input_stream.end_stream()
             except Exception:
                 pass
+
+    async def close(self) -> None:
+        self._stopped = True
+        await self._safe_end()
+        if self._handler_task:
+            self._handler_task.cancel()
