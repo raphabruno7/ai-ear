@@ -61,7 +61,11 @@ async def main() -> None:
         if not wav.exists():
             print(f"skip {s['id']} (no audio — run make_dataset.py)")
             continue
-        transcript = await transcribe_file(str(wav), REGION)
+        try:
+            transcript = await transcribe_file(str(wav), REGION)
+        except Exception as e:  # noqa: BLE001 — network blip, skip this sample
+            print(f"  {s['id']:>4} transcribe ERROR {e!r}"[:160])
+            continue
         for model in args.models:
             with span(f"eval:{model}", input={"transcript": transcript, "kind": s["kind"]}) as sp:
                 try:
@@ -76,13 +80,19 @@ async def main() -> None:
             results.append(rec)
             print(f"  {s['id']:>4} {model:<13} {'OK ' if sc['phonetic_ok'] else 'MISS'} "
                   f"exp={s['expected']!r} got={got!r}")
-            if sb:
-                sb.table("eval_runs").insert(rec).execute()
         if args.sleep:
             await asyncio.sleep(args.sleep)
 
     trace_flush()
-    _report(run_id, args.models, results)
+    _report(run_id, args.models, results)  # always, from memory
+
+    # Supabase is best-effort — a network blip must not lose the run.
+    if sb and results:
+        try:
+            sb.table("eval_runs").insert(results).execute()
+            print(f"wrote {len(results)} rows to eval_runs")
+        except Exception as e:  # noqa: BLE001
+            print(f"eval_runs write skipped: {e!r}")
 
 
 def _report(run_id: str, models: list[str], results: list[dict]) -> None:
