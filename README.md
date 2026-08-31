@@ -4,59 +4,67 @@ A real-time **voice copilot that listens** to a live call between two humans (a
 care coordinator and a customer), extracts appointment/clinical fields as the
 call runs, and writes them into a scheduling form via a **Chrome extension**.
 
-Companion to [`voice-demo`](../voice-demo) (six *talking* voice bots). This one
-is the opposite pattern: it never speaks. Built to demonstrate the stack a
-production agent-assist copilot needs — AWS Bedrock/Transcribe/SES, golden-set
-evals, Langfuse tracing, concurrency + data-isolation testing, per-call cost.
+Companion to `../voice-demo` (six *talking* voice bots). This one never speaks.
+Built to demonstrate the stack a production agent-assist copilot needs — AWS
+Bedrock/Transcribe/SES, golden-set evals, Langfuse tracing, concurrency +
+data-isolation testing, per-call cost. See **`INTERVIEW.md`** for the
+requirement → evidence map and the real numbers.
 
 ## Pipeline
 
 ```
 LiveKit room (2 humans + 1 silent listener)
-        │  audio track per speaker
+        │  one audio track per speaker
         ▼
-AWS Transcribe streaming ──► running transcript
+AWS Transcribe streaming ──► running transcript, per-speaker
         ▼
-AWS Bedrock (Claude 3.5 Haiku) ──► incremental structured extraction
+extraction — AWS Bedrock Claude Haiku 4.5  ⇄  Gemini 3.6 Flash   (EXTRACT_BACKEND toggle)
+        │  forced emit_fields tool / JSON, merge by confidence, debounced ~12s
         ▼
 Supabase (extracted_fields, call_costs)  +  WebSocket ──► Chrome extension ──► scheduling form
         ▼
-AWS SES ──► pre-visit briefing email (daily cron)
+AWS SES ──► pre-visit briefing email (listener/briefing.py, per session)
 ```
 
 ## Layout
 
 | Dir | What |
 |---|---|
-| `listener/` | Python — LiveKit listener agent, Transcribe, Bedrock extraction, cost tracking. Deploys to Railway. See `listener/AWS.md`. |
-| `web/` | Next.js 16 — dashboard (`/session/[id]`, `/eval`, `/costs`), field + briefing webhooks. Deploys to Vercel. |
-| `extension/` | Chrome MV3 — reads field updates over WS, fills the target form. |
-| `eval/` | Golden-set + A/B harness: Claude Haiku (Bedrock) vs Gemini 2.5 Flash on phonetic name/email accuracy. |
-| `loadtest/` | 10 concurrent rooms; measures extraction P95 under load + asserts cross-session data isolation. |
-| `supabase/migrations/` | `sessions`, `extracted_fields`, `call_costs`, `eval_runs`. All RLS, service-role only. |
+| `listener/` | Python — LiveKit listener, Transcribe, extraction (Bedrock/Gemini), cost, SES briefing, health check. Deploys to Railway. |
+| `web/` | Next.js 16 — dashboard (`/`, `/session/[id]`, `/eval`, `/costs`), `/api/health`, `/demo-scheduler`, `/login`. Deploys to Vercel. |
+| `extension/` | Chrome MV3 — subscribes to the listener's WS, fills `[data-copilot-field]` inputs. |
+| `eval/` | Golden-set A/B: Claude Haiku 4.5 (Bedrock) vs Gemini 3.6 Flash on phonetic name/email accuracy. |
+| `loadtest/` | N concurrent LiveKit rooms; extraction P95 under load + cross-session isolation assert. |
+| `supabase/migrations/` | `sessions`, `extracted_fields`, `call_costs`, `eval_runs`, `005` RLS policies. |
 
 ## Status
 
-- [x] **Fase 0** — scaffold, migrations, `.env.example`, AWS setup guide
-- [~] **Fase 1** — listener + AWS Transcribe streaming — code done, LiveKit wiring verified; Transcribe call blocked on new-account activation
-- [~] **Fase 2** — incremental Bedrock extraction — code done (forced tool, merge, persist, cost); blocked on AWS activation
-- [~] **Fase 3** — Langfuse tracing — `listener/trace.py` wired into extract + eval (no-ops without keys)
-- [ ] **Fase 4** — SES briefing (cron)
-- [~] **Fase 5** — golden-set A/B eval — metrics + 25-sample dataset + harness done; runs once AWS + `GEMINI_API_KEY`
-- [x] **Fase 6** — Chrome extension + demo-scheduler + WS fan-out (demo via `listener/ws_push.py`)
-- [~] **Fase 7** — load test — `loadtest/run.py`; N-room LiveKit concurrency verified, extraction/isolation pending AWS
-- [x] **Fase 8** — cost tracking + debounce + `OPTIMIZATION.md`
-- [x] **Dashboard** — `/` · `/session/[id]` (fields, time-to-fields, latency, cost) · `/eval` · `/costs` · `/api/health`
-- [x] **Incident handling** — `HEALTH.md` runbook, `/api/health`, `listener/healthcheck.py`
-- [x] **RLS policies** — `005_rls_policies.sql` (per-`vcc_id`)
-- [x] **Fase 9** — `INTERVIEW.md` (requirement → evidence + real numbers)
+All phases have code; **extraction with real fields is blocked on external quota**
+(Bedrock daily token cap on the new AWS account; Gemini free tier = 20 req/day).
+Everything else is verified. Details: `INTERVIEW.md` + `HANDOFF.md`.
 
-Full plan: `~/.claude/plans/crie-um-plano-de-witty-pond.md`
+| | |
+|---|---|
+| Fase 0 scaffold + migrations | ✅ |
+| Fase 1 listener + Transcribe (reconnect-resilient) | ✅ verified e2e (49s / 2 speakers / 14 finals) |
+| Fase 2 incremental extraction (Bedrock + Gemini backends) | ✅ code; real fields pending quota |
+| Fase 3 Langfuse tracing | ~ wired, needs keys + one run |
+| Fase 4 SES briefing | ✅ real email sent + received |
+| Fase 5 golden-set eval | ✅ Gemini side: 25 samples, 60% phonetic on names |
+| Fase 6 Chrome extension + WS fan-out | ✅ |
+| Fase 7 load test | ✅ 6 concurrent rooms, isolation PASS |
+| Fase 8 cost + debounce + `OPTIMIZATION.md` | ✅ |
+| Dashboard, `/api/health`, `HEALTH.md`, RLS, `INTERVIEW.md` | ✅ |
 
 ## Setup
 
-1. `cp .env.example .env` and fill it in (needs AWS, LiveKit, Supabase, Langfuse, Gemini).
-2. AWS: follow `listener/AWS.md`.
-3. Supabase: create a project, run the migrations in `supabase/migrations/` in order.
-4. `listener/`: `python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt`
-5. `web/`: `npm install && npm run dev`
+1. `cp .env.example .env` and fill it in.
+2. AWS: `listener/AWS.md`.
+3. Supabase: run `supabase/migrations/00{1..5}` in the SQL editor, in order.
+4. `cd listener && python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt`
+5. `cd web && npm install && ln -sf ../.env .env.local && npm run dev`
+
+## Resume this project
+
+Read **`HANDOFF.md`** — full context, what's verified, what's blocked, exact
+commands to continue.
