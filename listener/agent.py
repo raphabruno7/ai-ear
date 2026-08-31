@@ -110,10 +110,16 @@ async def run_listener(room_name: str, vcc_id: str, language: str) -> str:
             pass
     total_audio = sum(ts.audio_seconds for ts in sessions.values())
     extractor.add_stt_seconds(total_audio)
-    await extractor.finalize()   # last pass over the whole transcript
-    await extractor.flush()
-    await fields_ws.stop()
-    sb.table("sessions").update({"ended_at": "now()"}).eq("id", session_id).execute()
+    # best-effort teardown — a network blip at end-of-call must not crash the process
+    for step in (extractor.finalize(), extractor.flush(), fields_ws.stop()):
+        try:
+            await step
+        except Exception:  # noqa: BLE001
+            logger.warning("teardown step failed", exc_info=True)
+    try:
+        sb.table("sessions").update({"ended_at": "now()"}).eq("id", session_id).execute()
+    except Exception:  # noqa: BLE001
+        logger.warning("could not mark session ended_at")
     logger.info("session %s ended — %.1fs audio, %d turns, fields=%s",
                 session_id, total_audio, len(extractor.turns), extractor.snapshot())
     await room.disconnect()
