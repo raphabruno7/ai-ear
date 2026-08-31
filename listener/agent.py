@@ -15,6 +15,7 @@ import asyncio
 import logging
 import os
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from dotenv import load_dotenv
@@ -69,13 +70,19 @@ async def run_listener(room_name: str, vcc_id: str, language: str) -> str:
     sessions: dict[str, TranscribeSession] = {}
     done = asyncio.Event()
     room = rtc.Room()
+    last_activity = 0.0  # monotonic ts of the last transcript turn
+
+    async def _on_turn(speaker: str, text: str) -> None:
+        nonlocal last_activity
+        last_activity = time.monotonic()
+        await extractor.on_turn(speaker, text)
 
     def _start(track: rtc.Track, participant: rtc.RemoteParticipant) -> None:
         if track.kind != rtc.TrackKind.KIND_AUDIO:
             return
         speaker = participant.identity  # "vcc" | "family"
         stream = rtc.AudioStream(track, sample_rate=16_000, num_channels=1)
-        ts = TranscribeSession(speaker, extractor.on_turn, REGION, language)
+        ts = TranscribeSession(speaker, _on_turn, REGION, language)
         sessions[participant.sid] = ts
         logger.info("transcribing track from %s", speaker)
         asyncio.create_task(ts.run(stream))
@@ -94,6 +101,19 @@ async def run_listener(room_name: str, vcc_id: str, language: str) -> str:
     def _(*_a):
         done.set()
 
+    async def _idle_watch() -> None:
+        # LiveKit can swallow participant_disconnected on a signalling resume, leaving
+        # the call hanging forever. End it once transcripts stop arriving.
+        # ponytail: fixed idle threshold; a real call with a long pause could trip it —
+        # raise CALL_IDLE_END_S if that happens in production.
+        idle_s = float(os.environ.get("CALL_IDLE_END_S", 30))
+        while not done.is_set():
+            await asyncio.sleep(3)
+            if sessions and last_activity and time.monotonic() - last_activity > idle_s:
+                logger.info("no transcript for %.0fs — ending call", idle_s)
+                done.set()
+                return
+
     await room.connect(LIVEKIT_URL, listener_token(room_name))
     logger.info("connected, listening")
     # pick up tracks already present
@@ -102,7 +122,9 @@ async def run_listener(room_name: str, vcc_id: str, language: str) -> str:
             if pub.track:
                 _start(pub.track, p)
 
+    watchdog = asyncio.create_task(_idle_watch())
     await done.wait()
+    watchdog.cancel()
     for ts in sessions.values():
         try:
             await ts.close()
