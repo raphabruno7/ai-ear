@@ -5,6 +5,30 @@ Complete context to continue this project in a fresh Claude Code session opened
 
 ---
 
+## 0. Latest session (2026-08-31, afternoon)
+
+- **Gemini unblocked** — daily free-tier quota reset; `smoke` returns `pong`.
+  Bedrock still `ThrottlingException: Too many tokens per day` (support case
+  still needed).
+- **Bug found + fixed + committed** (`9e76a7a`): `TranscribeSession.close()`'s
+  shielded wait raises `CancelledError` (a `BaseException`), which slipped past
+  the `except Exception` guards in `agent.py` teardown → `finalize()` / `flush()`
+  were **never reached**, so `extracted_fields` / `call_costs` never landed even
+  on a clean full transcript. Now: `CancelledError` caught explicitly in
+  `transcribe_stream.py`; each teardown step (`finalize`/`flush`/`ws.stop`/
+  `sessions.update`) wrapped best-effort in `agent.py`. Verified — run
+  `demo-real-2` completed teardown cleanly and wrote a `call_costs` row.
+- **Real extraction numbers still NOT captured.** 5 e2e attempts this session:
+  2 got a full transcript (one pre-fix crash, one lost network mid-call), 3
+  failed because the **listener's LiveKit subscriber PeerConnection would not
+  complete ICE** (`signal_event taking too much time`, no `transcribing track`
+  line ever) — a degraded media path from this machine that afternoon, not a
+  code issue. `extracted_fields` table is still empty.
+  **Next:** retry the section-8 e2e on a stable network; then `/session/<id>` +
+  fill `INTERVIEW.md`.
+
+---
+
 ## 1. What this is and why
 
 A real-time voice **copilot that listens** to a live phone call between a
@@ -61,7 +85,7 @@ not through the Next app.
 |---|---|---|
 | 0 | scaffold, 4 migrations, `.env.example`, `AWS.md` | ✅ done |
 | 1 | listener + AWS Transcribe streaming | ✅ **verified e2e** — 49s two-speaker fixture → 14 final transcripts, both speaker labels, "Kathleen O'Brien" + "Luna" + phone + clinical notes |
-| 2 | incremental extraction + per-call cost | ✅ code (Bedrock forced-tool + Gemini JSON backends, debounce, `finalize()`); **real fields blocked on model quota** |
+| 2 | incremental extraction + per-call cost | ✅ code + teardown-persist bug fixed (`9e76a7a`); Gemini backend unblocked; **real fields still not captured — e2e blocked on flaky LiveKit media path, see §0** |
 | 3 | Langfuse tracing | ~ `listener/trace.py` wired into extract + eval; no-ops without keys; needs keys + one run + screenshot |
 | 4 | SES pre-visit briefing | ✅ **verified** — real email sent and received (`briefing.py`) |
 | 5 | golden-set A/B eval | ✅ Gemini side: 25 samples run, `report.md` + `/eval` dashboard + `eval_runs` rows. Bedrock side blocked. |
@@ -206,7 +230,8 @@ to ~1 day.
 
 ### Gemini — `429 RESOURCE_EXHAUSTED`
 Free tier = **20 requests/day/model** (`GenerateRequestsPerDayPerProjectPerModel-FreeTier`).
-Burned by the eval runs. **Unblock:** https://aistudio.google.com → Billing →
+**As of 2026-08-31 the daily quota had reset — Gemini works.** It will re-exhaust
+after ~20 requests. **Permanent unblock:** https://aistudio.google.com → Billing →
 enable (Flash is ~free — cents for the whole eval). Then remove/lower the
 `--sleep` in eval runs.
 
@@ -286,6 +311,9 @@ traces for `INTERVIEW.md`.
 ## 11. Commits (newest first)
 
 ```
+9e76a7a fix(listener): persist fields/costs on teardown despite CancelledError
+eacbf14 docs: PROFILE.md — skills demonstrated + CV update guidance
+0cf7112 docs: CLAUDE.md + HANDOFF.md + refreshed README
 5129825 test(loadtest): 6 concurrent rooms — no failures, isolation holds
 60347b8 feat: incident handling, RLS, agent-assist metrics, interview writeup
 250c695 feat(listener): swappable extract backend + debounce; OPTIMIZATION.md
