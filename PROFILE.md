@@ -22,8 +22,10 @@ correr. Base para actualizar CV / LinkedIn.
   o LLM é fiel ao transcript. Conclusão: a alavanca de accuracy é o STT.
 - **Concorrência + isolamento de dados** — 6 salas LiveKit em paralelo, sem falhas,
   assert de isolamento cross-session passa.
-- **Optimização de custo** — debounce reduz ~70% das chamadas ao LLM; modelo de
-  custo por chamada (~$0.26 / 8 min); tabela + dashboard de custo real.
+- **Optimização de custo** — debounce: **−69% de chamadas ao LLM** (13→4 no
+  fixture de 49s), ~−67% de tokens no fixture (o transcript curto faz o prompt
+  fixo dominar; numa chamada real de 8 min a poupança encolhe — por medir).
+  Modelo de custo por chamada (~$0.26 / 8 min); tabela + dashboard de custo real.
 - **Health checks** — endpoint de liveness + script de deep-check (STS, Transcribe,
   SES, Supabase — 4/4 ok).
 
@@ -67,7 +69,7 @@ correr. Base para actualizar CV / LinkedIn.
 | Prompt engineering | system prompt + tool schema para extracção multi-campo; lidar com "thinking tokens" do Gemini 3.x que comem o `max_output_tokens` |
 | FastAPI / WebSocket / Docker | agente Python containerizado (Railway), servidor WS embutido, health HTTP server |
 | Next.js / Supabase | dashboard server-components com RLS, `.throwOnError()`, symlink de env, `proxy.ts` (Next 16), Server Actions para auth |
-| Cost-hardening (Azure agent) | agora com tabela de custo real por chamada, projecção mensal, e uma optimização medida (debounce −70%) |
+| Cost-hardening (Azure agent) | agora com tabela de custo real por chamada, projecção mensal, e uma optimização medida (debounce: −69% chamadas / ~−67% tokens no fixture) |
 | GDPR / dados sensíveis | isolamento de dados clínicos por coordenador (RLS por `vcc_id`), políticas deny-all em tabelas operacionais |
 | Git / Claude Code | ~22 commits pequenos e descritos, plano de 9 fases executado, docs de handoff |
 
@@ -85,8 +87,9 @@ correr. Base para actualizar CV / LinkedIn.
 > fills the scheduling form; a pre-visit briefing goes out via AWS SES. Built a
 > golden-set evaluation harness (phonetic name/email accuracy — metaphone, WER)
 > that isolated STT, not the LLM, as the accuracy bottleneck. Concurrency +
-> cross-session data-isolation tested; per-call cost tracked and cut ~70% via
-> extraction debouncing. Python, LiveKit, AWS (Bedrock/Transcribe/SES), Supabase,
+> cross-session data-isolation tested; per-call cost instrumented, LLM
+> invocations cut ~70% (13→4/call) via debounced extraction. Python, LiveKit,
+> AWS (Bedrock/Transcribe/SES), Supabase,
 > Next.js, Langfuse.
 
 ### Adições à secção "STACK"

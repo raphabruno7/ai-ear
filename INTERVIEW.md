@@ -53,8 +53,13 @@ AWS SES ──► pre-visit briefing email (per session)
 - **Reliability fix — Transcribe silence close:** before, the call was
   effectively dead after ~2 utterances (~15 s); after the reopen-on-failure
   change, the full 49 s transcribes. Call-completion 30% → 100% on the fixture.
-- **Cost reduction — debounce:** one model call per utterance (~13 / call) →
-  ~4 / call + one final pass. ~70% fewer LLM calls, same field coverage.
+- **Debounced extraction:** one model call per utterance (~13 / call on the 49 s
+  fixture) → ~4 / call + one final pass = **−69% LLM invocations**, same field
+  coverage. Token-cost ≈ −67% on the fixture (short transcript, fixed
+  prompt+schema dominates); on a real 8-min call the saving shrinks (later calls
+  carry a bigger transcript) — not yet measured, no real LLM `call_costs` rows.
+  Also buys rate-limit headroom (16 → ~5 RPM) and fewer slow-call stalls in the
+  time-to-fields UX.
 - **Per-call cost model:** ≈ $0.26 for an 8-min call — $0.19 Transcribe +
   $0.07 Bedrock Haiku (`pricing.py`, self-checked; real `call_costs` rows for
   the STT leg).
