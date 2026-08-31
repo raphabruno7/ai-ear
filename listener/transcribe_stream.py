@@ -113,5 +113,7 @@ class TranscribeSession:
             # awscrt "set_result on CANCELLED future" during teardown
             try:
                 await asyncio.wait_for(asyncio.shield(self._handler_task), 1.0)
-            except (asyncio.TimeoutError, Exception):
+            except (asyncio.TimeoutError, asyncio.CancelledError, Exception):
+                # CancelledError is BaseException, not Exception — must be named
+                # explicitly or teardown (finalize/flush) is skipped upstream
                 self._handler_task.cancel()

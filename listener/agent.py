@@ -106,7 +106,7 @@ async def run_listener(room_name: str, vcc_id: str, language: str) -> str:
     for ts in sessions.values():
         try:
             await ts.close()
-        except Exception:  # noqa: BLE001 — best-effort teardown
+        except BaseException:  # noqa: BLE001 — best-effort teardown; never skip finalize/flush below
             pass
     total_audio = sum(ts.audio_seconds for ts in sessions.values())
     extractor.add_stt_seconds(total_audio)
