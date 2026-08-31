@@ -79,8 +79,9 @@ AWS SES ──► pre-visit briefing email (per session)
 
 ## Pending external quota (not code)
 
-- **Bedrock daily token cap** on the new AWS account — Support case open. Blocks
-  the Haiku side of the A/B and Fase 2 with real fields.
+- **Bedrock daily token cap** on the new AWS account — Support case to be filed
+  ("Account and billing", free). Blocks the Haiku side of the A/B and Fase 2
+  with real fields.
 - **Gemini free tier** = 20 req/day — blocks repeated full runs until billing
   is enabled.
 

@@ -35,6 +35,26 @@ Complete context to continue this project in a fresh Claude Code session opened
   **Next:** retry the §8 e2e on a stable network (mode 1 is pure connectivity);
   the code path is now robust once a run completes. Then `/session/<id>` +
   fill `INTERVIEW.md`.
+- **Root cause of the connectivity failure:** default route gateway `172.20.10.1`
+  + `en14` marked `constrained` = the machine was on an **iPhone Personal
+  Hotspot**. CGNAT on cellular breaks WebRTC UDP hole-punching — signalling
+  connects, media never does. Fix is a normal Wi-Fi, not code.
+
+### Do-now checklist (no Wi-Fi needed)
+1. **AWS Bedrock support case** — Console → Support Center → Create case →
+   *Account and billing* (free) → subject "Persistent Bedrock ThrottlingException
+   'Too many tokens per day' on new account", body = the draft in §7. ~1 day.
+2. **Gemini billing** — aistudio.google.com → Billing → enable on the project
+   (Flash ≈ free). Lifts the 20-req/day cap permanently. ~2 min.
+3. **Migration 005** — paste `supabase/migrations/005_rls_policies.sql` into the
+   Supabase SQL editor (no DB URL in `.env`, so it's a manual step). ~2 min.
+4. **Langfuse** — free project at cloud.langfuse.com, keys into `.env`
+   (`LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` / `LANGFUSE_HOST`). ~10 min.
+
+### On the Wi-Fi
+5. Listener e2e (`agent.py` + `sim_call.py`) → `/session/<id>` + `/costs`.
+6. Full A/B eval once Bedrock is back → `/eval` + real numbers in `INTERVIEW.md`.
+7. `briefing.py --session <id>` for that real session.
 
 ---
 
