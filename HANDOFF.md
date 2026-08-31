@@ -18,13 +18,22 @@ Complete context to continue this project in a fresh Claude Code session opened
   `transcribe_stream.py`; each teardown step (`finalize`/`flush`/`ws.stop`/
   `sessions.update`) wrapped best-effort in `agent.py`. Verified — run
   `demo-real-2` completed teardown cleanly and wrote a `call_costs` row.
-- **Real extraction numbers still NOT captured.** 5 e2e attempts this session:
-  2 got a full transcript (one pre-fix crash, one lost network mid-call), 3
-  failed because the **listener's LiveKit subscriber PeerConnection would not
-  complete ICE** (`signal_event taking too much time`, no `transcribing track`
-  line ever) — a degraded media path from this machine that afternoon, not a
-  code issue. `extracted_fields` table is still empty.
-  **Next:** retry the section-8 e2e on a stable network; then `/session/<id>` +
+- **Second fix, committed** (`fix(listener): idle watchdog…`): LiveKit swallows
+  `participant_disconnected` on a signalling resume → the listener hung forever
+  with the full transcript in memory but `finalize()` never called (runs
+  `demo-real-6`). Added an idle watchdog: end the call after `CALL_IDLE_END_S`
+  (default 30s) with no new transcript turn. Self-checked.
+- **Real extraction numbers still NOT captured.** 8 e2e attempts this session.
+  Two distinct failure modes, both environmental (this machine ↔ LiveKit media):
+  1. **tracks never subscribe** — subscriber PeerConnection can't complete ICE
+     (`signal_event taking too much time`, no `transcribing track` line). Runs
+     4, 5, 7, 8. Intermittent — run 6 subscribed fine at 20:55.
+  2. **tracks subscribe, full transcript, then hang** on a `ping timeout` /
+     resume that eats the disconnect. Runs 1–3, 6. Now handled by the watchdog.
+  `extracted_fields` table is **still empty** — no run has survived subscribe →
+  full transcript → `finalize()` in one go.
+  **Next:** retry the §8 e2e on a stable network (mode 1 is pure connectivity);
+  the code path is now robust once a run completes. Then `/session/<id>` +
   fill `INTERVIEW.md`.
 
 ---
