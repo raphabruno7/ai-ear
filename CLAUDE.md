@@ -57,7 +57,8 @@ one named room (CLI `--room`), never publishes audio.
   it burns the Gemini daily quota in one call.
 - **Model IDs**: Bedrock `us.anthropic.claude-haiku-4-5-20251001-v1:0` (inference
   profile — the plain `anthropic.…` on-demand id is "Not supported" for 4.5).
-  Gemini `gemini-3.6-flash` (`gemini-2.5-flash` is gone for new API users).
+  Gemini `gemini-3.6-flash` via Vertex AI (`GCP_LOCATION=global`; `us-central1`
+  is 2.5-flash only).
 - **Fixtures** (`listener/fixtures/*.wav`) are committed; `eval/dataset/audio/*.wav`
   are gitignored — regenerate with `eval/make_dataset.py` (macOS `say` + ffmpeg).
 
@@ -65,7 +66,7 @@ one named room (CLI `--room`), never publishes audio.
 
 ```bash
 cd listener
-.venv/bin/python smoke_aws.py                 # Bedrock reachable? (currently: daily throttle)
+.venv/bin/python smoke_aws.py                 # Bedrock reachable? (currently: daily throttle — sleep mode)
 .venv/bin/python healthcheck.py               # STS + Transcribe + SES + Supabase
 .venv/bin/python test_transcribe_wiring.py    # LiveKit → Transcribe → text, e2e (~50s)
 .venv/bin/python test_ws_server.py            # WS routing + isolation
@@ -77,19 +78,28 @@ cd loadtest && ../listener/.venv/bin/python run.py --rooms 6
 cd web && npm run build && npm start          # dashboard on :3000
 ```
 
-## Blocked on external quota (not code)
+## Extraction backend — Gemini via Vertex AI (current)
 
-- **Bedrock**: `ThrottlingException: Too many tokens per day` since account
-  creation (>48h). New-account daily cap. Needs an AWS Support case ("Account
-  and billing", free) — TPM/RPM quota defaults are fine (5M), it's a separate
-  daily limit. Until then run `EXTRACT_BACKEND=gemini`.
-- **Gemini**: free tier = 20 requests/day/model. Enable billing on the AI Studio
-  project (Flash is ~free) to lift it.
+`EXTRACT_BACKEND=gemini`. `_genai_client()` uses **Vertex AI** when `GCP_PROJECT`
+is set (`.env`: `GCP_PROJECT`, `GCP_LOCATION=global`) — ADC auth
+(`gcloud auth application-default login`), billed to the GCP project, no
+free-tier daily cap. Falls back to the `GEMINI_API_KEY` (AI Studio) path when
+`GCP_PROJECT` is unset. `GCP_LOCATION=global` is required for `gemini-3.6-flash`
+— `us-central1` only serves `gemini-2.5-flash`.
+
+The `_emit_gemini` → `merge` → `_persist` → `extracted_fields` path is verified
+end-to-end (2026-09-01). `pricing.py` `LLM_RATES` has per-backend rates.
+
+## Blocked (not code)
+
+- **Bedrock** — `ThrottlingException: Too many tokens per day` since account
+  creation. New-account daily cap; AWS Support case ("Account and billing",
+  free). **Sleep mode** — `_emit_bedrock` etc. untouched; set
+  `EXTRACT_BACKEND=bedrock` when it clears, for the Haiku-vs-Gemini A/B.
+- **LiveKit media e2e** — the listener e2e needs a stable Wi-Fi (not an iPhone
+  hotspot — CGNAT breaks WebRTC UDP). Code path is ready.
 - **Migration `005`** not yet run in the Supabase SQL editor.
 - **Langfuse** keys not in `.env` yet (`trace.py` no-ops without them).
-
-When either model unblocks: run `eval/run.py` for the full A/B, run the listener
-e2e with real fields into the dashboard, then finish `INTERVIEW.md` numbers.
 
 ## Deploy
 
