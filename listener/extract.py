@@ -162,7 +162,14 @@ class Extractor:
     def _genai_client(self):
         if self._genai is None:
             from google import genai
-            self._genai = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+            proj = os.environ.get("GCP_PROJECT")
+            if proj:  # Vertex AI — billed to the GCP project, no free-tier daily cap
+                self._genai = genai.Client(
+                    vertexai=True, project=proj,
+                    location=os.environ.get("GCP_LOCATION", "global"),
+                )
+            else:
+                self._genai = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
         return self._genai
 
     async def _emit_bedrock(self, convo: str) -> list[dict]:
@@ -239,7 +246,7 @@ class Extractor:
         try:
             import pricing
             usd_stt = pricing.stt_cost(self._stt_seconds)
-            usd_llm = pricing.llm_cost(self._in_tokens, self._out_tokens)
+            usd_llm = pricing.llm_cost(self._in_tokens, self._out_tokens, self.backend)
             self.supabase.table("call_costs").upsert({
                 "session_id": self.session_id,
                 "stt_seconds": round(self._stt_seconds, 2),

@@ -5,11 +5,25 @@ Complete context to continue this project in a fresh Claude Code session opened
 
 ---
 
-## 0. Latest session (2026-08-31, afternoon)
+## 0. Latest session (2026-08-31 → 09-01)
 
-- **Gemini unblocked** — daily free-tier quota reset; `smoke` returns `pong`.
-  Bedrock still `ThrottlingException: Too many tokens per day` (support case
-  still needed).
+- **Extraction now runs on Vertex AI (Google Cloud).** `_genai_client()` in
+  `extract.py` + `eval/models.py` use Vertex when `GCP_PROJECT` is set (ADC auth,
+  `gcloud auth application-default login`) — billed to the GCP project, no
+  free-tier daily cap. `EXTRACT_BACKEND=gemini` is still the value; Vertex is
+  transparent. `.env`: `GCP_PROJECT=project-f785b239-de2b-43c7-b98`,
+  `GCP_LOCATION=global`, `GEMINI_MODEL_ID=gemini-3.6-flash` (only `global`
+  serves 3.6; `us-central1` is 2.5-flash only). Verified: real fields extracted
+  through the `Extractor` path and through `eval/models.extract_gemini`.
+- `pricing.py` now has per-backend LLM rates (`LLM_RATES`); `llm_cost(..., backend)`.
+  Gemini 3.6 Flash on Vertex ≈ $0.75/$3.75 per 1M (introductory, to 2026-12-31).
+- **Bedrock is in sleep mode, not removed.** `_emit_bedrock`, `_bedrock_client`,
+  `extract_bedrock`, the Bedrock rate in `LLM_RATES` all untouched. The day the
+  AWS support case clears: set `EXTRACT_BACKEND=bedrock` and it works again.
+- **Gemini (AI Studio key)** — daily free-tier quota had also reset, but the
+  Vertex path makes that irrelevant now. Bedrock still
+  `ThrottlingException: Too many tokens per day` (support case still needed —
+  §7 / §0 checklist).
 - **Bug found + fixed + committed** (`9e76a7a`): `TranscribeSession.close()`'s
   shielded wait raises `CancelledError` (a `BaseException`), which slipped past
   the `except Exception` guards in `agent.py` teardown → `finalize()` / `flush()`

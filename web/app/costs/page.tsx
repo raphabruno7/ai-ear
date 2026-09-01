@@ -34,7 +34,7 @@ export default async function CostsPage() {
     <div>
       <h1 className="text-lg font-semibold">Per-call cost</h1>
       <p className="mt-1 text-sm text-zinc-500">
-        AWS Transcribe streaming + Bedrock Claude Haiku. Prices: <code>listener/pricing.py</code>.
+        AWS Transcribe streaming + the extraction LLM (Bedrock Haiku or Gemini Flash). Prices: <code>listener/pricing.py</code>.
       </p>
 
       {error && <p className="mt-4 text-sm text-red-600">Supabase: {error}</p>}

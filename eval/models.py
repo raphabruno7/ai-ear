@@ -75,7 +75,13 @@ def extract_gemini(transcript: str, kind: str) -> str:
     from google import genai
     from google.genai import types
 
-    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+    _proj = os.environ.get("GCP_PROJECT")
+    client = (
+        genai.Client(vertexai=True, project=_proj,
+                     location=os.environ.get("GCP_LOCATION", "global"))
+        if _proj else
+        genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+    )
     # Gemini 3.x counts thinking tokens against max_output_tokens and rejects
     # thinking_budget=0 for flash — so just give it ample room.
     cfg = types.GenerateContentConfig(temperature=0, max_output_tokens=2000)
