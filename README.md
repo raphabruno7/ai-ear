@@ -1,70 +1,112 @@
 # call-copilot
 
 A real-time **voice copilot that listens** to a live call between two humans (a
-care coordinator and a customer), extracts appointment/clinical fields as the
-call runs, and writes them into a scheduling form via a **Chrome extension**.
+veterinary care coordinator and a pet family), transcribes it, extracts
+appointment + clinical fields as the call runs, and writes them into a scheduling
+form via a **Chrome extension**. Second workstream: a pre-visit briefing email.
+It never speaks.
 
-Companion to `../voice-demo` (six *talking* voice bots). This one never speaks.
-Built to demonstrate the stack a production agent-assist copilot needs — AWS
-Bedrock/Transcribe/SES, golden-set evals, Langfuse tracing, concurrency +
-data-isolation testing, per-call cost. See **`INTERVIEW.md`** for the
-requirement → evidence map and the real numbers.
+Companion to [`voice-demo`](../voice-demo) — six *talking* voice bots. Framing:
+"bots that talk" vs "a copilot that listens".
+
+Built as a portfolio piece for the Neurons Lab **"Voice Copilot Architect"**
+role, mirroring the target stack — AWS Transcribe/SES, golden-set evals, Langfuse
+tracing, concurrency + data-isolation testing, per-call cost. **`INTERVIEW.md`**
+is the requirement → evidence map with the real numbers.
+
+Repo: `github.com/raphabruno7/ai-ear` (private).
 
 ## Pipeline
 
 ```
-LiveKit room (2 humans + 1 silent listener)
+LiveKit room (VCC + family + 1 silent listener)
         │  one audio track per speaker
         ▼
 AWS Transcribe streaming ──► running transcript, per-speaker
         ▼
-extraction — AWS Bedrock Claude Haiku 4.5  ⇄  Gemini 3.6 Flash   (EXTRACT_BACKEND toggle)
-        │  forced emit_fields tool / JSON, merge by confidence, debounced ~12s
+extraction — Gemini 3.6 Flash (Vertex AI)  ⇄  Claude Haiku 4.5 (Bedrock)
+        │  EXTRACT_BACKEND toggle · forced emit_fields tool / JSON
+        │  merge by confidence · debounced ~12s · finalize() at call end
         ▼
 Supabase (extracted_fields, call_costs)  +  WebSocket ──► Chrome extension ──► scheduling form
         ▼
 AWS SES ──► pre-visit briefing email (listener/briefing.py, per session)
 ```
 
+Plain `rtc.Room`, **not** the livekit-agents worker framework — the listener
+joins one named room and never publishes audio. The extension talks to a
+WebSocket **on the listener process**, not through the web app.
+
 ## Layout
 
 | Dir | What |
 |---|---|
-| `listener/` | Python — LiveKit listener, Transcribe, extraction (Bedrock/Gemini), cost, SES briefing, health check. Deploys to Railway. |
+| `listener/` | Python 3.12 — LiveKit listener, Transcribe streaming, extraction (Vertex/Bedrock), per-call cost, SES briefing, health check, latency bench. Deploys to Railway. |
 | `web/` | Next.js 16 — dashboard (`/`, `/session/[id]`, `/eval`, `/costs`), `/api/health`, `/demo-scheduler`, `/login`. Deploys to Vercel. |
-| `extension/` | Chrome MV3 — subscribes to the listener's WS, fills `[data-copilot-field]` inputs. |
-| `eval/` | Golden-set A/B: Claude Haiku 4.5 (Bedrock) vs Gemini 3.6 Flash on phonetic name/email accuracy. |
-| `loadtest/` | N concurrent LiveKit rooms; extraction P95 under load + cross-session isolation assert. |
+| `extension/` | Chrome MV3 — subscribes to the listener's WS, fills `[data-copilot-field]` inputs (React-safe). |
+| `eval/` | Golden-set A/B: Claude Haiku 4.5 vs Gemini 3.6 Flash on phonetic name/email accuracy (WER / Levenshtein / metaphone). |
+| `loadtest/` | N concurrent LiveKit rooms; extraction p50/p95 under load + cross-session isolation assert. |
 | `supabase/migrations/` | `sessions`, `extracted_fields`, `call_costs`, `eval_runs`, `005` RLS policies. |
 
 ## Status
 
-All phases have code; **extraction with real fields is blocked on external quota**
-(Bedrock daily token cap on the new AWS account; Gemini free tier = 20 req/day).
-Everything else is verified. Details: `INTERVIEW.md` + `HANDOFF.md`.
+Extraction runs end-to-end on **Vertex AI**; the `_emit → merge → _persist →
+extracted_fields` path is verified. Bedrock is wired and benchmarked but in
+"sleep mode" (default is Gemini). **The one gap is the full listener e2e with a
+live LiveKit call** — blocked on a stable Wi-Fi (WebRTC media fails on
+cellular/CGNAT), not on code.
 
-| | |
+| Phase | State |
 |---|---|
-| Fase 0 scaffold + migrations | ✅ |
-| Fase 1 listener + Transcribe (reconnect-resilient) | ✅ verified e2e (49s / 2 speakers / 14 finals) |
-| Fase 2 incremental extraction (Bedrock + Gemini backends) | ✅ code; real fields pending quota |
-| Fase 3 Langfuse tracing | ~ wired, needs keys + one run |
-| Fase 4 SES briefing | ✅ real email sent + received |
-| Fase 5 golden-set eval | ✅ Gemini side: 25 samples, 60% phonetic on names |
-| Fase 6 Chrome extension + WS fan-out | ✅ |
-| Fase 7 load test | ✅ 6 concurrent rooms, isolation PASS |
-| Fase 8 cost + debounce + `OPTIMIZATION.md` | ✅ |
-| Dashboard, `/api/health`, `HEALTH.md`, RLS, `INTERVIEW.md` | ✅ |
+| 0 scaffold + migrations 001–005 | ✅ |
+| 1 listener + Transcribe (reconnect-resilient) | ✅ verified e2e (49s / 2 speakers / 14 finals) |
+| 2 incremental extraction (Vertex + Bedrock backends) | ✅ code + persist path verified; live LiveKit e2e pending Wi-Fi |
+| 3 Langfuse tracing | ✅ v4, 59 traces (smoke + full A/B) |
+| 4 SES briefing | ✅ real email sent + received |
+| 5 golden-set A/B | ✅ Haiku vs Gemini, 25 samples — see `INTERVIEW.md` |
+| 6 Chrome extension + WS fan-out | ✅ WS+fill verified (`extension/VERIFY.md`); MV3 shell needs one manual load-unpacked |
+| 7 load test | ✅ 6 concurrent rooms, isolation PASS |
+| 8 cost + debounce + latency bench | ✅ `OPTIMIZATION.md`, `listener/bench_latency.py` |
+| — dashboard, `/api/health`, `HEALTH.md`, RLS | ✅ |
 
 ## Setup
 
 1. `cp .env.example .env` and fill it in.
-2. AWS: `listener/AWS.md`.
+2. AWS: `listener/AWS.md`. Google Cloud (extraction): enable Vertex AI API,
+   `gcloud auth application-default login`, set `GCP_PROJECT` / `GCP_LOCATION=global`.
 3. Supabase: run `supabase/migrations/00{1..5}` in the SQL editor, in order.
 4. `cd listener && python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt`
 5. `cd web && npm install && ln -sf ../.env .env.local && npm run dev`
 
-## Resume this project
+## Verify / demo
 
-Read **`HANDOFF.md`** — full context, what's verified, what's blocked, exact
-commands to continue.
+```bash
+cd listener
+.venv/bin/python healthcheck.py              # STS + Transcribe + SES + Supabase
+.venv/bin/python smoke_aws.py                # Bedrock reachable?
+.venv/bin/python smoke_langfuse.py           # one trace to Langfuse
+.venv/bin/python extract.py                  # merge + parser self-checks
+.venv/bin/python bench_latency.py --demo     # time-to-first-value bench
+.venv/bin/python ws_push.py --session demo-1 # drive the extension, no cloud
+
+cd eval && ../listener/.venv/bin/python run.py         # full A/B → report.md + /eval
+cd web && npm run build && npm start                   # dashboard on :3000
+```
+
+## Docs
+
+| File | Purpose |
+|---|---|
+| `INTERVIEW.md` | Requirement → evidence map + the real numbers (the pitch). |
+| `HANDOFF.md` | Full session history, what's verified, what's blocked, exact resume commands. |
+| `GLOSSARY.md` | Every technical term used, explained (pt-PT). |
+| `OPTIMIZATION.md` | Cost & latency plan — done vs next, with measurements. |
+| `HEALTH.md` | Incident runbook — each failure mode → symptom → check → fix. |
+| `PROFILE.md` | What this demonstrates, for the CV / interview talking points. |
+| `CLAUDE.md` | Instructions for Claude Code working in this repo. |
+| `listener/AWS.md` | AWS account setup, IAM policy, model access. |
+| `extension/VERIFY.md` | How the extension was verified + the one-time manual pass. |
+
+## Contributing
+
+Solo project. Work goes on a branch → PR → merge to `main` → push. No remote CI yet.
