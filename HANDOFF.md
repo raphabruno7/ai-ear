@@ -1,11 +1,36 @@
 # call-copilot — session handoff
 
 Complete context to continue this project in a fresh Claude Code session opened
-**inside `~/call-copilot`**. Everything below reflects state as of 2026-08-31.
+**inside `~/call-copilot`**. Everything below reflects state as of 2026-09-02.
 
 ---
 
-## 0. Latest session (2026-08-31 → 09-01)
+## 0.0 PENDING — start here next cycle (as of 2026-09-02)
+
+Nothing left is an engineering blocker. Each item is connectivity, a credential,
+or a small chore. Priority order:
+
+| # | Item | Blocked on | Effort |
+|---|---|---|---|
+| 1 | **Listener e2e with a live LiveKit call** → real `extracted_fields` + LLM `call_costs` row → `/session/<id>`, `/costs`, fill `INTERVIEW.md` | **Stable Wi-Fi** (WebRTC media fails on cellular/CGNAT — see §0). Code path is robust. | 20 min on Wi-Fi |
+| 2 | `briefing.py --session <id>` for that real session | item 1 | 2 min |
+| 3 | **Langfuse screenshot** — open one `eval:gemini-flash` trace, screenshot for `INTERVIEW.md` | nothing (traces are live) | 2 min |
+| 4 | **STT custom vocabulary** (the accuracy lever) — create a vocab of hard owner/pet names, wire `VocabularyName` into `transcribe_stream.py` + `eval/models.py`, re-run eval, show the delta | add `transcribe:CreateVocabulary` / `GetVocabulary` / `ListVocabularies` / `DeleteVocabulary` to the `call-copilot-policy` IAM policy (AWS console) | ~1 h after IAM |
+| 5 | **Prompt-audit fixes** F1–F3 (see the audit output, 2026-09-02) — F2 matters: `eval/models.py:21` example `"Kathleen O'Brien"` is the gold answer for sample `n01`. Fix + re-run the A/B. | nothing | 15 min |
+| 6 | **GPT in the A/B** — the job wording is "Haiku vs GPT"; the repo did Haiku vs Gemini. Add an `openai` backend to `eval/models.py`. | `OPENAI_API_KEY` | 30 min |
+| 7 | **Deploy** — `listener/` → Railway (Dockerfile + railway.toml ready), `web/` → Vercel. Add CI. | Railway + Vercel accounts/tokens | half a day |
+| 8 | **Extension MV3 manual pass** — one `chrome://extensions` → Load unpacked → confirm badge ● + fill (WS+fill logic already verified programmatically, `extension/VERIFY.md`) | nothing | 10 min |
+| 9 | **Bedrock support case** — still open? if the throttle cleared (it did on 2026-09-02), nothing to do; the A/B already ran both sides | — | — |
+
+**Workflow from here:** branch per task → push → `gh pr create` → user merges.
+One-line fixes may go straight to `main`.
+
+**PRs merged this cycle:** #1 (README refresh + PR workflow), #2 (Langfuse
+token+cost), #3 (DEMO.md + PROFILE.md refresh).
+
+---
+
+## 0. Session log (2026-08-31 → 09-02)
 
 - **Extraction now runs on Vertex AI (Google Cloud).** `_genai_client()` in
   `extract.py` + `eval/models.py` use Vertex when `GCP_PROJECT` is set (ADC auth,
@@ -54,19 +79,8 @@ Complete context to continue this project in a fresh Claude Code session opened
   Hotspot**. CGNAT on cellular breaks WebRTC UDP hole-punching — signalling
   connects, media never does. Fix is a normal Wi-Fi, not code.
 
-### Do-now checklist (no Wi-Fi needed)
-1. **AWS Bedrock support case** — Console → Support Center → Create case →
-   *Account and billing* (free) → subject "Persistent Bedrock ThrottlingException
-   'Too many tokens per day' on new account", body = the draft in §7. ~1 day.
-2. **Gemini billing** — aistudio.google.com → Billing → enable on the project
-   (Flash ≈ free). Lifts the 20-req/day cap permanently. ~2 min.
-3. **Migration 005** — ✅ run 2026-09-02 (RLS SELECT policies per `vcc_id`).
-4. **Langfuse** — ✅ done, 59 traces. Only a screenshot left for `INTERVIEW.md`.
-
-### On the Wi-Fi
-5. Listener e2e (`agent.py` + `sim_call.py`) → `/session/<id>` + `/costs`.
-6. Full A/B eval once Bedrock is back → `/eval` + real numbers in `INTERVIEW.md`.
-7. `briefing.py --session <id>` for that real session.
+(Consolidated do-now/on-the-Wi-Fi checklist moved to **§0.0 PENDING** above.
+Migration 005 ✅, Langfuse ✅, Bedrock throttle cleared ✅, A/B ran both sides ✅.)
 
 ---
 
