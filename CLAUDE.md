@@ -103,13 +103,15 @@ end-to-end (2026-09-01). `pricing.py` `LLM_RATES` has per-backend rates.
 
 ## Deploy
 
-- Push `main` → nothing auto-deploys yet (no remote configured). Local only.
+- Remote: `origin` → `github.com/raphabruno7/ai-ear` (private). Push `main` →
+  nothing auto-deploys yet (no Railway/Vercel hookup).
 - Intended: `listener/` → Railway (Dockerfile + railway.toml), `web/` → Vercel.
 
 ## Git
 
 ```
-No remote yet. Branch: main (solo greenfield — commits go to main).
+Remote: origin → github.com/raphabruno7/ai-ear (private). Branch: main
+(solo greenfield — commits go to main, then push).
 Commit style: feat(listener): … / fix(web): … / docs: …
 ```
 
