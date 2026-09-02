@@ -62,8 +62,7 @@ Complete context to continue this project in a fresh Claude Code session opened
    (Flash ≈ free). Lifts the 20-req/day cap permanently. ~2 min.
 3. **Migration 005** — paste `supabase/migrations/005_rls_policies.sql` into the
    Supabase SQL editor (no DB URL in `.env`, so it's a manual step). ~2 min.
-4. **Langfuse** — free project at cloud.langfuse.com, keys into `.env`
-   (`LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` / `LANGFUSE_HOST`). ~10 min.
+4. **Langfuse** — ✅ done, 59 traces. Only a screenshot left for `INTERVIEW.md`.
 
 ### On the Wi-Fi
 5. Listener e2e (`agent.py` + `sim_call.py`) → `/session/<id>` + `/costs`.
@@ -129,7 +128,7 @@ not through the Next app.
 | 0 | scaffold, 4 migrations, `.env.example`, `AWS.md` | ✅ done |
 | 1 | listener + AWS Transcribe streaming | ✅ **verified e2e** — 49s two-speaker fixture → 14 final transcripts, both speaker labels, "Kathleen O'Brien" + "Luna" + phone + clinical notes |
 | 2 | incremental extraction + per-call cost | ✅ code + teardown-persist bug fixed (`9e76a7a`); Gemini backend unblocked; **real fields still not captured — e2e blocked on flaky LiveKit media path, see §0** |
-| 3 | Langfuse tracing | ~ `listener/trace.py` wired into extract + eval; no-ops without keys; needs keys + one run + screenshot |
+| 3 | Langfuse tracing | ✅ `trace.py` (v4) wired into extract + eval; keys in `.env`; 59 traces landed (smoke + full A/B). Screenshot pending. |
 | 4 | SES pre-visit briefing | ✅ **verified** — real email sent and received (`briefing.py`) |
 | 5 | golden-set A/B eval | ✅ Gemini side: 25 samples run, `report.md` + `/eval` dashboard + `eval_runs` rows. Bedrock side blocked. |
 | 6 | Chrome extension + demo-scheduler | ✅ MV3 + WS fan-out; demo via `ws_push.py` |
@@ -225,7 +224,7 @@ Secrets are in `~/call-copilot/.env` (gitignored). Non-secret identifiers:
 | **LiveKit Cloud** | project `copilot-aws-1s7p7hzj`, EU region. Agent observability disabled. | `.env`: `LIVEKIT_URL` (`wss://copilot-aws-1s7p7hzj.livekit.cloud`), `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` |
 | **Supabase** | project ref `qtynypkfbwdstnnfiuuw`. URL `https://qtynypkfbwdstnnfiuuw.supabase.co`. Migrations 001–004 applied; 005 not. | `.env`: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` |
 | **Gemini API** | key from AI Studio (`AQ.…` format — authenticates fine). Model `gemini-3.6-flash`. Free tier = 20 req/day/model. | `.env`: `GEMINI_API_KEY`, `GEMINI_MODEL_ID` |
-| **Langfuse** | not set up. | `.env`: `LANGFUSE_*` blank |
+| **Langfuse** | EU cloud, project `cmtk3gub6013qad0cxmnpkjmf`. Traces flowing. | `.env`: `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` / `LANGFUSE_HOST` |
 
 Other `.env`: `ADMIN_SECRET` (blank = dashboard open locally), `FIELDS_WEBHOOK_SECRET`,
 `CRON_SECRET`, `WEB_BASE_URL=http://localhost:3000`, `EXTRACT_BACKEND=gemini`.
@@ -281,12 +280,14 @@ enable (Flash is ~free — cents for the whole eval). Then remove/lower the
 ### Migration 005 not applied
 Run `supabase/migrations/005_rls_policies.sql` in the Supabase SQL editor.
 
-### Langfuse — gap D NOT closed; blocker removed, still needs the account (2026-09-02)
-Zero traces, zero screenshot — same one user action as before. What changed:
-`trace.py` updated for langfuse **v4** (`start_as_current_observation`; the old
-`start_as_current_span` was v3 — it would have errored even with keys). v4 path
-exercised with fake keys (executes to a 401 at export — no AttributeError).
-`LANGFUSE_HOST` is the right env name for v4. `smoke_langfuse.py` added.
+### Langfuse — DONE (2026-09-02)
+`trace.py` updated for langfuse **v4** (`start_as_current_observation`). Keys in
+`.env` (EU region, project `cmtk3gub6013qad0cxmnpkjmf`). **59 traces landed** —
+1 smoke + a full A/B (33 `eval:gemini-flash` + 25 `eval:bedrock-haiku`), each
+with input (transcript+kind), output, and metadata (expected, sample id).
+`smoke_langfuse.py` sends one on demand.
+Traces: https://cloud.langfuse.com/project/cmtk3gub6013qad0cxmnpkjmf/traces
+**Left:** screenshot one opened trace for `INTERVIEW.md`.
 **To finish (~10 min, no Wi-Fi needed):**
 1. Free project at https://cloud.langfuse.com → Settings → API Keys.
 2. In `.env`: `LANGFUSE_PUBLIC_KEY=pk-lf-…`, `LANGFUSE_SECRET_KEY=sk-lf-…`

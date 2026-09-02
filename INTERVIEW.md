@@ -34,7 +34,7 @@ AWS SES ──► pre-visit briefing email (per session)
 | LLM field extraction, structured output, guardrails | `listener/extract.py` — forced `emit_fields` tool (Bedrock) / JSON (Gemini), confidence merge |
 | **Model A/B** (Claude Haiku 4.5 vs Gemini 3.6 Flash) | `EXTRACT_BACKEND=bedrock\|gemini` at runtime + `eval/` golden-set harness; real numbers below |
 | Golden-set eval — phonetic name/email accuracy | `eval/` — 25 hard samples, WER / Levenshtein / metaphone, `report.md` + `/eval` dashboard |
-| Observability (Langfuse) | `listener/trace.py` — spans on every extract + eval call |
+| Observability (Langfuse) | `listener/trace.py` (v4) — spans on every extract + eval call; 59 traces landed (smoke + full A/B), input/output/metadata per call |
 | Cost per call | `listener/pricing.py` + `call_costs` + `/costs` dashboard (STT vs LLM, 1k/mo projection) |
 | Concurrency (5–10+ calls) | `loadtest/run.py` — N LiveKit rooms in parallel |
 | Data isolation between users | `vcc_id` on every row + `005_rls_policies.sql` + `test_ws_server.py` cross-session check + loadtest isolation assert |
