@@ -37,8 +37,10 @@ def span(name: str, **start_kw):
     if not _ENABLED or _client is None:
         yield _Span(None)
         return
+    # langfuse v4 renamed start_as_current_span -> start_as_current_observation
+    _start = getattr(_client, "start_as_current_observation", None) or _client.start_as_current_span
     try:
-        with _client.start_as_current_span(name=name, input=start_kw.get("input")) as s:
+        with _start(name=name, input=start_kw.get("input")) as s:
             yield _Span(s)
     except Exception:  # noqa: BLE001
         yield _Span(None)

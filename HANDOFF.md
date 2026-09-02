@@ -281,10 +281,17 @@ enable (Flash is ~free — cents for the whole eval). Then remove/lower the
 ### Migration 005 not applied
 Run `supabase/migrations/005_rls_policies.sql` in the Supabase SQL editor.
 
-### Langfuse not wired
-Create a free project at cloud.langfuse.com, put `LANGFUSE_PUBLIC_KEY` /
-`LANGFUSE_SECRET_KEY` in `.env`, run any eval or listener session, screenshot the
-traces for `INTERVIEW.md`.
+### Langfuse — code ready, needs an account (2026-09-02)
+`trace.py` updated for langfuse **v4** (`start_as_current_observation`; the old
+`start_as_current_span` was v3 — it would have failed even with keys). No-op path
+verified. `smoke_langfuse.py` added.
+**To finish (~10 min, no Wi-Fi needed):**
+1. Free project at https://cloud.langfuse.com → Settings → API Keys.
+2. In `.env`: `LANGFUSE_PUBLIC_KEY=pk-lf-…`, `LANGFUSE_SECRET_KEY=sk-lf-…`
+   (`LANGFUSE_HOST` is already `https://cloud.langfuse.com`).
+3. `cd listener && .venv/bin/python smoke_langfuse.py` → prints a trace URL.
+4. `cd eval && ../listener/.venv/bin/python run.py --models gemini-flash` →
+   traces populate. Screenshot for `INTERVIEW.md`.
 
 ---
 
