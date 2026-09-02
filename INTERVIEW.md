@@ -32,7 +32,7 @@ AWS SES ──► pre-visit briefing email (per session)
 | Agent-assist / live transcription copilot | the whole system — `listener/agent.py` |
 | Streaming STT, turn handling, low-latency | `listener/transcribe_stream.py` — AWS Transcribe streaming, per-speaker, reopen-on-silence |
 | LLM field extraction, structured output, guardrails | `listener/extract.py` — forced `emit_fields` tool (Bedrock) / JSON (Gemini), confidence merge |
-| **Model A/B** (Claude Haiku vs GPT) | `EXTRACT_BACKEND=bedrock\|gemini` at runtime + `eval/` golden-set harness |
+| **Model A/B** (Claude Haiku 4.5 vs Gemini 3.6 Flash) | `EXTRACT_BACKEND=bedrock\|gemini` at runtime + `eval/` golden-set harness; real numbers below |
 | Golden-set eval — phonetic name/email accuracy | `eval/` — 25 hard samples, WER / Levenshtein / metaphone, `report.md` + `/eval` dashboard |
 | Observability (Langfuse) | `listener/trace.py` — spans on every extract + eval call |
 | Cost per call | `listener/pricing.py` + `call_costs` + `/costs` dashboard (STT vs LLM, 1k/mo projection) |
@@ -66,12 +66,22 @@ AWS SES ──► pre-visit briefing email (per session)
 - **Concurrency:** 6 LiveKit rooms opened in parallel — all connect + publish,
   no failures, wall 14–19 s each, cross-session data-isolation assert passes.
   (Job bar: 5–10+ concurrent calls.)
-- **Eval — Gemini 3.6 Flash, 25 samples:** names 40% exact / 60% phonetic,
-  emails ~40%. **Every miss is AWS Transcribe (en-US) mangling non-English
-  phonemes** — "Aoife Ní Bhraonáin" → "Aoife Ibra Oman", "Seán Mac Cárthaigh" →
-  "Sean McCarvey". The LLM output is faithful to the transcript. **Conclusion:
-  the lever for phonetic accuracy is STT (custom vocabulary / multilingual
-  model), not LLM choice.**
+- **Eval — full A/B, Haiku 4.5 vs Gemini 3.6 Flash, 25 hard samples:**
+
+  | model | names exact | names phonetic | names WER | emails exact |
+  |---|--:|--:|--:|--:|
+  | Gemini 3.6 Flash (Vertex AI) | 47% | 67% | 0.43 | 30% |
+  | Claude Haiku 4.5 (Bedrock)   | 40% | 60% | 0.59 | 30% |
+
+  Gemini marginally ahead on names, tied on emails. **The two models miss the
+  same samples** — "Aoife Ní Bhraonáin" → "Aoife Ibra Oman", "Seán Mac
+  Cárthaigh" → "Sean McCarvey" — because the input transcript is identical.
+  **Every miss is AWS Transcribe (en-US) mangling non-English phonemes; the LLM
+  output is faithful to the transcript.** Conclusion: the accuracy lever is
+  **STT** (custom vocabulary, or a more accent-robust model), not LLM choice.
+- **Extraction runs on Vertex AI** (`GCP_PROJECT` set → Vertex, else AI Studio
+  key). Bedrock left wired for the A/B — `EXTRACT_BACKEND` toggles at runtime.
+  The `_emit → merge → _persist → extracted_fields` path is verified end-to-end.
 
 ## Demo-ready now
 
@@ -79,16 +89,16 @@ AWS SES ──► pre-visit briefing email (per session)
   (no cloud needed).
 - Full listener run against `sim_call.py` — session → transcript → cost →
   dashboard.
-- `eval/run.py` (Gemini side), `/eval` dashboard.
+- `eval/run.py` — full A/B (both models), `/eval` dashboard, `eval_runs` rows.
 - `briefing.py` — real SES email.
 
-## Pending external quota (not code)
+## Pending (not code)
 
-- **Bedrock daily token cap** on the new AWS account — Support case to be filed
-  ("Account and billing", free). Blocks the Haiku side of the A/B and Fase 2
-  with real fields.
-- **Gemini free tier** = 20 req/day — blocks repeated full runs until billing
-  is enabled.
+- **Listener e2e with real fields into the dashboard** — needs a stable Wi-Fi;
+  LiveKit media (WebRTC UDP) fails on cellular/CGNAT. Extraction + persist path
+  already verified without LiveKit.
+- **STT accuracy lever** — custom Transcribe vocabulary (or a second STT in the
+  eval harness) to close the non-English-name gap. Not yet done.
 
 ## Honest gaps (interview, not repo)
 
