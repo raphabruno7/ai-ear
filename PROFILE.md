@@ -29,16 +29,31 @@ correr. Base para actualizar CV / LinkedIn.
 - **Health checks** — endpoint de liveness + script de deep-check (STS, Transcribe,
   SES, Supabase — 4/4 ok).
 
-### Código escrito, à espera de quota externa (afirma como "construído", não "provado à escala")
-- Extracção estruturada incremental com merge por confiança + latência por campo
-  (backends AWS Bedrock **e** Gemini, trocáveis por env var — é o A/B de modelo em
-  runtime que a vaga pede). Bloqueado: cap diário de tokens do Bedrock em conta nova.
-- A/B completo Haiku vs Gemini sobre o golden-set. Bloqueado no lado Bedrock.
-- Langfuse (wired, sem keys).
+### Verificado (adicionado 2026-09-01/02)
+- **Extracção estruturada incremental** — merge por confiança + latência por campo;
+  backends **Vertex AI (Gemini)** e **Bedrock (Haiku)** trocáveis por env var. O
+  caminho `_emit → merge → _persist → extracted_fields` está verificado e2e (sem
+  LiveKit). Bedrock ficou em "sleep mode" — destravado, default é Gemini/Vertex.
+- **A/B completo Haiku 4.5 vs Gemini 3.6 Flash** — 25 amostras: nomes
+  Gemini 47%/67% exact/fonético vs Haiku 40%/60%; emails empatados a 30%. **Os
+  dois modelos falham as mesmas amostras** → confirma que o gargalo é o STT.
+- **Langfuse ao vivo** — SDK v4, 59 traces (smoke + A/B completo), com token +
+  custo por observação (`$` populado).
+- **Extensão Chrome** — caminho WS → contrato → fill verificado contra a página
+  real (`/demo-scheduler`): 7/7 campos incl. textarea, valores sobrevivem a
+  re-render. Falta 1 "load unpacked" manual do shell MV3.
+- **Latência do debounce medida** — `bench_latency.py`: debounce 12s vs per-turn,
+  tempos-até-primeiro-valor iguais ou melhores com debounce, chamada ~25s mais
+  curta, −65% chamadas. O "~1 min lag num campo" é posição no transcript
+  (`preferred_time` só no fim), não o extrator.
+- **RLS** — migração 005 aplicada (políticas SELECT por `vcc_id`).
 
 ### Não feito
+- **Listener e2e com uma chamada LiveKit real** — bloqueado em Wi-Fi estável
+  (WebRTC media falha em rede móvel/CGNAT), não em código.
 - Deploy em produção (Railway/Vercel).
-- Redução de P95 documentada com antes→depois (instrumentado, sem a narrativa ainda).
+- STT custom vocabulary (a alavanca de accuracy) — precisa de `transcribe:CreateVocabulary`
+  na política IAM.
 
 ---
 
@@ -82,15 +97,16 @@ correr. Base para actualizar CV / LinkedIn.
 > **Real-Time Call Copilot** · agent-assist for scheduling workflows
 > A listening voice copilot: joins a live two-party call as a silent participant,
 > streams each speaker to AWS Transcribe, and extracts appointment/clinical fields
-> in real time with an LLM (AWS Bedrock Claude Haiku / Gemini — runtime-swappable
-> backend for A/B). Fields flow over WebSocket to a Chrome extension (MV3) that
-> fills the scheduling form; a pre-visit briefing goes out via AWS SES. Built a
-> golden-set evaluation harness (phonetic name/email accuracy — metaphone, WER)
-> that isolated STT, not the LLM, as the accuracy bottleneck. Concurrency +
-> cross-session data-isolation tested; per-call cost instrumented, LLM
-> invocations cut ~70% (13→4/call) via debounced extraction. Python, LiveKit,
-> AWS (Bedrock/Transcribe/SES), Supabase,
-> Next.js, Langfuse.
+> in real time with an LLM — runtime-swappable backend (Gemini on Vertex AI ⇄
+> Claude Haiku on Bedrock) benchmarked on a golden set. Fields flow over WebSocket
+> to a Chrome extension (MV3) that fills the scheduling form; a pre-visit briefing
+> goes out via AWS SES. The golden-set eval (phonetic name/email accuracy —
+> metaphone, WER) isolated STT, not the LLM, as the accuracy bottleneck — both
+> models miss the same samples. Concurrency + cross-session data-isolation tested;
+> per-call cost + extraction latency instrumented (Langfuse, traces with token +
+> cost), LLM invocations cut ~65% via debounced extraction with no latency hit.
+> Python, LiveKit, AWS (Transcribe/Bedrock/SES/IAM), Google Cloud (Vertex AI),
+> Supabase, Next.js, Langfuse.
 
 ### Adições à secção "STACK"
 
@@ -111,13 +127,16 @@ correr. Base para actualizar CV / LinkedIn.
 
 ## 5. O que NÃO afirmar ainda
 
-- ❌ "Reduzi P95 em produção de Xs para Ys" — tens a instrumentação, não a narrativa
-  com números reais. Corre a optimização e mede primeiro.
-- ❌ "A/B Claude Haiku vs GPT/Gemini com resultados" — só o lado Gemini correu.
+- ❌ "Reduzi P95 em produção de Xs para Ys" — tens a instrumentação e o bench
+  (`bench_latency.py`), mas single-run e sobre o fixture, não produção.
 - ❌ "Em produção / com utilizadores reais" para *este* projeto — é portfolio,
-  verificado em fixture. (O `voice-demo` e o Azure agent são a tua prova de
-  "voice AI a atender chamadas reais".)
-- ❌ "Langfuse in production" — está wired, sem uma corrida real.
+  verificado em fixture + testes programáticos. (O `voice-demo` e o Azure agent
+  são a tua prova de "voice AI a atender chamadas reais".)
+- ⚠️ "Chamada LiveKit real do início ao fim no dashboard" — o pipeline está
+  provado por peças (extração + persist + Langfuse + extensão), mas ainda não
+  houve uma chamada LiveKit ao vivo completa (bloqueio de Wi-Fi/CGNAT).
+- ✅ Já podes afirmar: A/B Haiku vs Gemini com números; Langfuse com traces reais
+  (token+custo); extensão a preencher o formulário; extração e2e (sem LiveKit).
 - ⚠️ Cuidado ao mostrar/descrever — o domínio (hospício veterinário, VCC) é o
   produto exacto do cliente da Neurons Lab. Como portfolio *para eles*: forte.
   Publicamente / para vender: reposiciona para outro vertical.
