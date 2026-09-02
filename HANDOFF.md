@@ -60,8 +60,7 @@ Complete context to continue this project in a fresh Claude Code session opened
    'Too many tokens per day' on new account", body = the draft in §7. ~1 day.
 2. **Gemini billing** — aistudio.google.com → Billing → enable on the project
    (Flash ≈ free). Lifts the 20-req/day cap permanently. ~2 min.
-3. **Migration 005** — paste `supabase/migrations/005_rls_policies.sql` into the
-   Supabase SQL editor (no DB URL in `.env`, so it's a manual step). ~2 min.
+3. **Migration 005** — ✅ run 2026-09-02 (RLS SELECT policies per `vcc_id`).
 4. **Langfuse** — ✅ done, 59 traces. Only a screenshot left for `INTERVIEW.md`.
 
 ### On the Wi-Fi
@@ -131,12 +130,12 @@ not through the Next app.
 | 3 | Langfuse tracing | ✅ `trace.py` (v4) wired into extract + eval; keys in `.env`; 59 traces landed (smoke + full A/B). Screenshot pending. |
 | 4 | SES pre-visit briefing | ✅ **verified** — real email sent and received (`briefing.py`) |
 | 5 | golden-set A/B eval | ✅ Gemini side: 25 samples run, `report.md` + `/eval` dashboard + `eval_runs` rows. Bedrock side blocked. |
-| 6 | Chrome extension + demo-scheduler | ✅ MV3 + WS fan-out; demo via `ws_push.py` |
+| 6 | Chrome extension + demo-scheduler | ✅ MV3 + WS fan-out; WS+fill path verified against the real page 2026-09-02 (`extension/VERIFY.md`, `docs/extension-fill-verified.jpg`); MV3 shell still needs one manual load-unpacked pass |
 | 7 | load test + isolation | ✅ 6 concurrent LiveKit rooms, no failures, isolation assert PASS; extraction rows 0 (Gemini quota) |
 | 8 | cost tracking + optimisation | ✅ `call_costs`, `/costs`, debounce (~70% fewer LLM calls), `OPTIMIZATION.md` |
 | 9 | interview writeup | ✅ `INTERVIEW.md` (requirement → evidence + real numbers) |
 | — | incident handling | ✅ `HEALTH.md`, `web/api/health`, `listener/healthcheck.py` (4/4 ok) |
-| — | RLS policies | ✅ `005_rls_policies.sql` written — **not yet run in Supabase SQL editor** |
+| — | RLS policies | ✅ `005_rls_policies.sql` **run 2026-09-02** in Supabase |
 | — | agent-assist metrics | ✅ `/session/[id]` shows fields-on-screen, time-to-first-field, time-to-all-fields |
 
 ---
@@ -208,7 +207,7 @@ asserts no cross-session value leak. `--rooms N`.
 - `002_extracted_fields.sql` — `extracted_fields` (session_id FK, vcc_id, field_name, field_value, confidence, model, latency_ms, extracted_at). History kept — latest row per (session, field) wins.
 - `003_call_costs.sql` — `call_costs` (session_id PK, stt_seconds, llm tokens, usd_*).
 - `004_eval_runs.sql` — `eval_runs` (run_id, model, sample_id, kind, expected, got, exact, wer, lev_norm, phonetic_ok).
-- `005_rls_policies.sql` — per-`vcc_id` SELECT on sessions + extracted_fields; deny-all on costs/eval. **NOT YET RUN.**
+- `005_rls_policies.sql` — per-`vcc_id` SELECT on sessions + extracted_fields; deny-all on costs/eval. **Run 2026-09-02.**
 
 ---
 
@@ -222,7 +221,7 @@ Secrets are in `~/call-copilot/.env` (gitignored). Non-secret identifiers:
 | **Bedrock** | model access granted (Anthropic Claude Haiku 4.5 + 3 Haiku). Model id `us.anthropic.claude-haiku-4-5-20251001-v1:0` (US inference profile). | `.env`: `BEDROCK_MODEL_ID` |
 | **SES** | identity `raphaelbruno.dev@gmail.com` **verified**. Sandbox (send only to verified). | `.env`: `SES_FROM_EMAIL`, `SES_TO_EMAIL` (both the gmail) |
 | **LiveKit Cloud** | project `copilot-aws-1s7p7hzj`, EU region. Agent observability disabled. | `.env`: `LIVEKIT_URL` (`wss://copilot-aws-1s7p7hzj.livekit.cloud`), `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` |
-| **Supabase** | project ref `qtynypkfbwdstnnfiuuw`. URL `https://qtynypkfbwdstnnfiuuw.supabase.co`. Migrations 001–004 applied; 005 not. | `.env`: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` |
+| **Supabase** | project ref `qtynypkfbwdstnnfiuuw`. URL `https://qtynypkfbwdstnnfiuuw.supabase.co`. Migrations 001–005 applied. | `.env`: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` |
 | **Gemini API** | key from AI Studio (`AQ.…` format — authenticates fine). Model `gemini-3.6-flash`. Free tier = 20 req/day/model. | `.env`: `GEMINI_API_KEY`, `GEMINI_MODEL_ID` |
 | **Langfuse** | EU cloud, project `cmtk3gub6013qad0cxmnpkjmf`. Traces flowing. | `.env`: `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` / `LANGFUSE_HOST` |
 
@@ -277,8 +276,7 @@ after ~20 requests. **Permanent unblock:** https://aistudio.google.com → Billi
 enable (Flash is ~free — cents for the whole eval). Then remove/lower the
 `--sleep` in eval runs.
 
-### Migration 005 not applied
-Run `supabase/migrations/005_rls_policies.sql` in the Supabase SQL editor.
+### Migration 005 — done (2026-09-02).
 
 ### Langfuse — DONE (2026-09-02)
 `trace.py` updated for langfuse **v4** (`start_as_current_observation`). Keys in
@@ -319,7 +317,7 @@ Traces: https://cloud.langfuse.com/project/cmtk3gub6013qad0cxmnpkjmf/traces
 
 1. **Unblock a model** (Bedrock support case OR Gemini billing) → real
    extraction numbers. *Highest value — it's the one gap in the demo.*
-2. **Run migration 005** (2 min).
+2. ~~Run migration 005~~ ✅ done.
 3. **Langfuse** — keys + one run + screenshot (~30 min).
 4. **Full A/B** once Bedrock is back — Haiku vs Gemini on the 25-sample set,
    write the comparison into `INTERVIEW.md`.

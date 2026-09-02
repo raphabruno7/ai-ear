@@ -39,7 +39,7 @@ AWS SES ──► pre-visit briefing email (per session)
 | Concurrency (5–10+ calls) | `loadtest/run.py` — N LiveKit rooms in parallel |
 | Data isolation between users | `vcc_id` on every row + `005_rls_policies.sql` + `test_ws_server.py` cross-session check + loadtest isolation assert |
 | Incident handling, monitoring, rollback | `HEALTH.md`, `/api/health`, `listener/healthcheck.py` |
-| Chrome extension delivery | `extension/` — MV3, WS client, React-safe form fill |
+| Chrome extension delivery | `extension/` — MV3, WS client, React-safe form fill; WS→contract→fill verified end-to-end against `/demo-scheduler` (7/7 fields incl. textarea, values survive re-render) — `extension/VERIFY.md` |
 | Telephony / streaming stacks | LiveKit (rooms + SIP), AWS Transcribe; Twilio in `voice-demo` |
 | SES epic end to end | `listener/briefing.py` — verified: real email sent + received |
 | AWS: Bedrock, serverless, SES, token economics | all three wired; `pricing.py` + debounce + `OPTIMIZATION.md` |
@@ -106,6 +106,8 @@ AWS SES ──► pre-visit briefing email (per session)
   already verified without LiveKit.
 - **STT accuracy lever** — custom Transcribe vocabulary (or a second STT in the
   eval harness) to close the non-English-name gap. Not yet done.
+- **Extension MV3 shell** — one manual load-unpacked pass before demoing (the
+  WS+fill logic is already verified programmatically).
 
 ## Honest gaps (interview, not repo)
 
