@@ -35,7 +35,9 @@ _SYSTEM = (
     "transcript so far. Call emit_fields with every field you are reasonably sure of. "
     "Use proper formatting: names with real spelling and capitalisation; emails as "
     "valid addresses, expanding spoken 'at' / 'dot' / 'underscore' / 'hyphen'; phone "
-    "as digits. Only include a field the transcript actually supports. confidence is 0..1."
+    "as digits. visit_type: infer one of 'wellness', 'sick', 'urgent', 'follow-up', "
+    "'end-of-life' from the reason for the call (e.g. not eating / lethargic -> 'sick'). "
+    "Only include a field the transcript actually supports. confidence is 0..1."
 )
 
 _TOOL = {
