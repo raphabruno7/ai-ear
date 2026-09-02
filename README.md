@@ -98,6 +98,7 @@ cd web && npm run build && npm start                   # dashboard on :3000
 | File | Purpose |
 |---|---|
 | `INTERVIEW.md` | Requirement → evidence map + the real numbers (the pitch). |
+| `DEMO.md` | How to present it — 5-min walkthrough, talking points, fallbacks. |
 | `HANDOFF.md` | Full session history, what's verified, what's blocked, exact resume commands. |
 | `GLOSSARY.md` | Every technical term used, explained (pt-PT). |
 | `OPTIMIZATION.md` | Cost & latency plan — done vs next, with measurements. |
