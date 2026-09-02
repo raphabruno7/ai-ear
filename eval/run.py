@@ -23,8 +23,9 @@ load_dotenv(HERE.parent / ".env")
 
 import sys  # noqa: E402
 sys.path.insert(0, str(HERE.parent / "listener"))
+import pricing  # noqa: E402
 from metrics import score  # noqa: E402
-from models import EXTRACTORS, transcribe_file  # noqa: E402
+from models import EXTRACTORS, LAST_USAGE, transcribe_file  # noqa: E402
 from trace import span, flush as trace_flush  # noqa: E402
 
 SAMPLES = HERE / "dataset" / "samples.jsonl"
@@ -73,7 +74,14 @@ async def main() -> None:
                 except Exception as e:  # one bad call must not kill the run
                     got = ""
                     print(f"  {s['id']:>4} {model:<13} ERROR {e!r}"[:160])
-                sp.update(output=got, metadata={"expected": s["expected"], "sample": s["id"]})
+                up = {"output": got, "metadata": {"expected": s["expected"], "sample": s["id"]}}
+                if LAST_USAGE:
+                    tin, tout = LAST_USAGE["input"], LAST_USAGE["output"]
+                    usd = pricing.llm_cost(tin, tout, LAST_USAGE["backend"])
+                    up.update(model=LAST_USAGE.get("model"),
+                              usage_details={"input": tin, "output": tout},
+                              cost_details={"total": usd})
+                sp.update(**up)
             sc = score(s["expected"], got, s["kind"])
             rec = {"run_id": run_id, "model": model, "sample_id": s["id"], "kind": s["kind"],
                    "expected": s["expected"], "got": got, **sc}

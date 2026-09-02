@@ -34,13 +34,19 @@ class _Span:
 
 @contextlib.contextmanager
 def span(name: str, **start_kw):
+    """An LLM-call observation. Emits a `generation` so token/cost show in Langfuse."""
     if not _ENABLED or _client is None:
         yield _Span(None)
         return
-    # langfuse v4 renamed start_as_current_span -> start_as_current_observation
-    _start = getattr(_client, "start_as_current_observation", None) or _client.start_as_current_span
+    inp = start_kw.get("input")
+    obs = getattr(_client, "start_as_current_observation", None)
     try:
-        with _start(name=name, input=start_kw.get("input")) as s:
+        if obs is not None:  # langfuse v4
+            cm = obs(name=name, input=inp, as_type="generation")
+        else:                # langfuse v3
+            gen = getattr(_client, "start_as_current_generation", _client.start_as_current_span)
+            cm = gen(name=name, input=inp)
+        with cm as s:
             yield _Span(s)
     except Exception:  # noqa: BLE001
         yield _Span(None)
