@@ -98,8 +98,8 @@ end-to-end (2026-09-01). `pricing.py` `LLM_RATES` has per-backend rates.
   `EXTRACT_BACKEND=bedrock` when it clears, for the Haiku-vs-Gemini A/B.
 - **LiveKit media e2e** — the listener e2e needs a stable Wi-Fi (not an iPhone
   hotspot — CGNAT breaks WebRTC UDP). Code path is ready.
-- **Migration `005`** not yet run in the Supabase SQL editor.
-- **Langfuse** keys not in `.env` yet (`trace.py` no-ops without them).
+- **Migration `005`** — ✅ run 2026-09-02.
+- **Langfuse** — ✅ keys in `.env`, 59 traces landed.
 
 ## Deploy
 
@@ -110,8 +110,9 @@ end-to-end (2026-09-01). `pricing.py` `LLM_RATES` has per-backend rates.
 ## Git
 
 ```
-Remote: origin → github.com/raphabruno7/ai-ear (private). Branch: main
-(solo greenfield — commits go to main, then push).
+Remote: origin → github.com/raphabruno7/ai-ear (private).
+Workflow: branch per task → push → `gh pr create` → user merges to main.
+  (one-line fixes may still go straight to main).
 Commit style: feat(listener): … / fix(web): … / docs: …
 ```
 
