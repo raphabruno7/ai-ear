@@ -61,12 +61,12 @@ AWS SES ──► pre-visit briefing email (per session)
   Also buys rate-limit headroom (16 → ~5 RPM) and fewer slow-call stalls in the
   time-to-fields UX.
 - **Debounce is not a latency tax** (`listener/bench_latency.py` — replays the
-  call turn-by-turn, records time-to-first-value per field). Debounce 12s vs
-  per-turn: first-value times are a wash or better under debounce, call wall-time
-  110s vs 141s. The "~1 min lag on one field type" is *transcript position* —
-  `preferred_time` is only agreed near call-end; `finalize()` is the backstop.
-  The bench also surfaced `visit_type` never being extracted → fixed with a
-  prompt allowed-value list (now ~29s).
+  call turn-by-turn, records time-to-first-value per field; single run each,
+  directional). Debounce 12s vs per-turn: first-value times a wash or better
+  under debounce, call wall-time ~110s vs ~140s, −65% LLM calls. The "~1 min lag
+  on one field type" is *transcript position* — `preferred_time` is only agreed
+  near call-end; `finalize()` is the backstop. The bench also surfaced
+  `visit_type` never being extracted → fixed with a prompt allowed-value list.
 - **Per-call cost model:** ≈ $0.26 for an 8-min call — $0.19 Transcribe +
   $0.07 Bedrock Haiku (`pricing.py`, self-checked; real `call_costs` rows for
   the STT leg).

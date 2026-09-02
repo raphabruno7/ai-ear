@@ -9,22 +9,25 @@ Real numbers: `listener/pricing.py` (snapshot), `/costs` dashboard, `eval/report
 
   **Debounce is not a latency tax** — `listener/bench_latency.py` replays the
   fixture call turn-by-turn at a realistic cadence and records when each field
-  first gets a value (single run each, Gemini 3.6 Flash on Vertex):
+  first gets a value (single run each, Gemini 3.6 Flash on Vertex, after the
+  `visit_type` prompt fix below):
 
   | field | debounce 12s | per-turn (gap=0) |
   |---|--:|--:|
-  | clinical_notes | 29s | 21s |
-  | visit_type | 29s | — |
-  | owner_name | 40s | 36s |
-  | owner_phone | 53s | 55s |
-  | owner_email | 67s | 73s |
-  | pet_name | 81s | 91s |
-  | preferred_time | 100s | 125s |
-  | **call wall-time** | **110s** | **141s** |
+  | clinical_notes | 29s | 22s |
+  | visit_type | 29s | 22s |
+  | owner_name | 40s | 38s |
+  | owner_phone | 53s | 56s |
+  | owner_email | 67s | 74s |
+  | pet_name | 81s | 95s |
+  | preferred_time | 100s | 126s |
+  | call wall-time | ~110s | ~140s |
 
-  First-value times are a wash (±5s) or *better* under debounce, while wall-time
-  drops ~22% and calls drop ~65%: per-turn extraction serialises ~14 LLM calls
+  First-value times are a wash (±5s early, debounce *ahead* on the later fields),
+  and the call finishes ~25s sooner: per-turn extraction serialises ~14 LLM calls
   and fires them on fragments that lack context, so it is both slower and pricier.
+  Single run each — the later-field deltas carry LLM-nondeterminism noise; the
+  direction (debounce ≥ per-turn on latency, −65% on calls) is the robust claim.
 
 - **The "~1 min lag on one field type" is transcript position, not the extractor.**
   `preferred_time` cannot appear before ~100s because the appointment slot is

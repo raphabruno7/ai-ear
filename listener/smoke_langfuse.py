@@ -22,15 +22,14 @@ if not os.environ.get("LANGFUSE_PUBLIC_KEY"):
 
 from trace import _client, span, flush  # noqa: E402
 
+url = None
 with span("smoke", input={"hello": "call-copilot"}) as s:
     s.update(output={"ok": True}, metadata={"source": "smoke_langfuse.py"})
+    if _client is not None:
+        try:
+            url = _client.get_trace_url()
+        except Exception:  # noqa: BLE001
+            pass
 
 flush()
-
-url = None
-if _client is not None:
-    try:
-        url = _client.get_trace_url()
-    except Exception:  # noqa: BLE001
-        pass
 print("sent one trace to Langfuse.", f"View: {url}" if url else "Check the dashboard.")

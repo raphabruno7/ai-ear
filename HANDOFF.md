@@ -281,10 +281,12 @@ enable (Flash is ~free — cents for the whole eval). Then remove/lower the
 ### Migration 005 not applied
 Run `supabase/migrations/005_rls_policies.sql` in the Supabase SQL editor.
 
-### Langfuse — code ready, needs an account (2026-09-02)
+### Langfuse — gap D NOT closed; blocker removed, still needs the account (2026-09-02)
+Zero traces, zero screenshot — same one user action as before. What changed:
 `trace.py` updated for langfuse **v4** (`start_as_current_observation`; the old
-`start_as_current_span` was v3 — it would have failed even with keys). No-op path
-verified. `smoke_langfuse.py` added.
+`start_as_current_span` was v3 — it would have errored even with keys). v4 path
+exercised with fake keys (executes to a 401 at export — no AttributeError).
+`LANGFUSE_HOST` is the right env name for v4. `smoke_langfuse.py` added.
 **To finish (~10 min, no Wi-Fi needed):**
 1. Free project at https://cloud.langfuse.com → Settings → API Keys.
 2. In `.env`: `LANGFUSE_PUBLIC_KEY=pk-lf-…`, `LANGFUSE_SECRET_KEY=sk-lf-…`
