@@ -20,6 +20,7 @@ from dataclasses import dataclass, field as dc_field
 
 from pydantic import BaseModel
 
+import pricing
 from trace import span
 
 logger = logging.getLogger("copilot-listener.extract")
@@ -214,6 +215,7 @@ class Extractor:
         if self.backend == "bedrock" and not self.model_id:
             return False
         convo = "\n".join(f"{spk}: {txt}" for spk, txt in self._transcript)
+        tin0, tout0 = self._in_tokens, self._out_tokens
         with span("extract_turn", input=convo) as sp:
             try:
                 emit = self._emit_gemini if self.backend == "gemini" else self._emit_bedrock
@@ -224,7 +226,14 @@ class Extractor:
                 return False
 
             latency_ms = int((time.monotonic() - turn_ts) * 1000)
-            sp.update(output=emitted, metadata={"latency_ms": latency_ms, "backend": self.backend})
+            d_in, d_out = self._in_tokens - tin0, self._out_tokens - tout0
+            sp.update(
+                output=emitted,
+                model=self.gemini_model if self.backend == "gemini" else self.model_id,
+                metadata={"latency_ms": latency_ms, "backend": self.backend},
+                usage_details={"input": d_in, "output": d_out},
+                cost_details={"total": pricing.llm_cost(d_in, d_out, self.backend)},
+            )
 
         changed = False
         for f in emitted:
@@ -246,7 +255,6 @@ class Extractor:
         if not self.supabase or not self.session_id:
             return
         try:
-            import pricing
             usd_stt = pricing.stt_cost(self._stt_seconds)
             usd_llm = pricing.llm_cost(self._in_tokens, self._out_tokens, self.backend)
             self.supabase.table("call_costs").upsert({

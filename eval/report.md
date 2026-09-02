@@ -1,19 +1,19 @@
-# Eval run 20260902-140619
+# Eval run 20260902-201020
 
 | model | kind | n | exact | phonetic | mean WER | mean lev |
 |---|---|--:|--:|--:|--:|--:|
-| bedrock-haiku | name | 15 | 40% | 60% | 0.589 | 0.201 |
+| bedrock-haiku | name | 15 | 40% | 60% | 0.589 | 0.170 |
 | bedrock-haiku | email | 10 | 30% | 30% | 0.700 | 0.092 |
-| gemini-flash | name | 15 | 47% | 67% | 0.422 | 0.145 |
+| gemini-flash | name | 15 | 47% | 67% | 0.433 | 0.145 |
 | gemini-flash | email | 10 | 30% | 30% | 0.700 | 0.092 |
 
 ## Misses
 
 - `bedrock-haiku` n04 — expected `Aoife Ní Bhraonáin`, got `Aoife Ibra Oman`
 - `gemini-flash` n04 — expected `Aoife Ní Bhraonáin`, got `Aoife Ibra Oman`
-- `bedrock-haiku` n05 — expected `Nguyen Thi Hoa`, got `Nyentihoa Nguyen`
+- `bedrock-haiku` n05 — expected `Nguyen Thi Hoa`, got `Nguyenihoa`
+- `gemini-flash` n05 — expected `Nguyen Thi Hoa`, got `Nguyen Ihoa`
 - `bedrock-haiku` n06 — expected `Priya Rajagopalan`, got `Pre Raja Gopalan`
-- `gemini-flash` n06 — expected `Priya Rajagopalan`, got `Prithvi Rajagopalan`
 - `bedrock-haiku` n07 — expected `Michał Wojciechowski`, got `Mitchell Wozkowski`
 - `gemini-flash` n07 — expected `Michał Wojciechowski`, got `Mitchell Wozkowski`
 - `bedrock-haiku` n11 — expected `Xiuying Zhang`, got `Xu Ying Zhang`

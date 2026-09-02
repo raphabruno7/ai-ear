@@ -56,9 +56,15 @@ async def transcribe_file(path: str, region: str, language: str = "en-US") -> st
     return " ".join(parts).strip()
 
 
+# token usage of the most recent extract call, for Langfuse span enrichment.
+# {input, output, backend} — read by run.py right after the call.
+LAST_USAGE: dict = {}
+
+
 def extract_bedrock(transcript: str, kind: str) -> str:
     import boto3
 
+    LAST_USAGE.clear()
     model_id = os.environ["BEDROCK_MODEL_ID"]
     br = boto3.client("bedrock-runtime", region_name=os.environ.get("AWS_REGION", "us-east-1"))
     resp = br.converse(
@@ -66,6 +72,9 @@ def extract_bedrock(transcript: str, kind: str) -> str:
         messages=[{"role": "user", "content": [{"text": _PROMPT.format(kind=kind, transcript=transcript)}]}],
         inferenceConfig={"maxTokens": 100, "temperature": 0},
     )
+    u = resp.get("usage", {})
+    LAST_USAGE.update(input=u.get("inputTokens", 0), output=u.get("outputTokens", 0),
+                      backend="bedrock", model=model_id)
     return _clean(resp["output"]["message"]["content"][0]["text"].strip())
 
 
@@ -88,10 +97,16 @@ def extract_gemini(transcript: str, kind: str) -> str:
     model = os.environ.get("GEMINI_MODEL_ID", "gemini-3.6-flash")
     prompt = _PROMPT.format(kind=kind, transcript=transcript)
 
+    LAST_USAGE.clear()
     last: Exception | None = None
     for attempt in range(4):
         try:
             resp = client.models.generate_content(model=model, contents=prompt, config=cfg)
+            m = getattr(resp, "usage_metadata", None)
+            if m:
+                LAST_USAGE.update(input=getattr(m, "prompt_token_count", 0) or 0,
+                                  output=getattr(m, "candidates_token_count", 0) or 0,
+                                  backend="gemini", model=model)
             return _clean((resp.text or "").strip())
         except Exception as e:
             last = e
