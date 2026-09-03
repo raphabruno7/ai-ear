@@ -9,10 +9,12 @@ It never speaks.
 Companion to [`voice-demo`](../voice-demo) — six *talking* voice bots. Framing:
 "bots that talk" vs "a copilot that listens".
 
-Built as a portfolio piece for the Neurons Lab **"Voice Copilot Architect"**
-role, mirroring the target stack — AWS Transcribe/SES, golden-set evals, Langfuse
-tracing, concurrency + data-isolation testing, per-call cost. **`INTERVIEW.md`**
-is the requirement → evidence map with the real numbers.
+A portfolio piece exploring **ambient AI** — the category of clinical software
+that listens and writes the record instead of talking. Built hands-on to learn
+where the hard problems actually are: streaming STT, real-time structured
+extraction, golden-set accuracy evals, Langfuse tracing, concurrency +
+data-isolation, per-call cost. **`EVIDENCE.md`** is the claim → evidence map with
+the real numbers.
 
 Repo: `github.com/raphabruno7/ai-ear` (private).
 
@@ -63,7 +65,7 @@ cellular/CGNAT), not on code.
 | 2 incremental extraction (Vertex + Bedrock backends) | ✅ code + persist path verified; live LiveKit e2e pending Wi-Fi |
 | 3 Langfuse tracing | ✅ v4, 59 traces (smoke + full A/B) |
 | 4 SES briefing | ✅ real email sent + received |
-| 5 golden-set A/B | ✅ Haiku vs Gemini, 25 samples — see `INTERVIEW.md` |
+| 5 golden-set A/B | ✅ Haiku vs Gemini, 25 samples — see `EVIDENCE.md` |
 | 6 Chrome extension + WS fan-out | ✅ WS+fill verified (`extension/VERIFY.md`); MV3 shell needs one manual load-unpacked |
 | 7 load test | ✅ 6 concurrent rooms, isolation PASS |
 | 8 cost + debounce + latency bench | ✅ `OPTIMIZATION.md`, `listener/bench_latency.py` |
@@ -97,13 +99,13 @@ cd web && npm run build && npm start                   # dashboard on :3000
 
 | File | Purpose |
 |---|---|
-| `INTERVIEW.md` | Requirement → evidence map + the real numbers (the pitch). |
+| `EVIDENCE.md` | Requirement → evidence map + the real numbers (the pitch). |
 | `DEMO.md` | How to present it — 5-min walkthrough, talking points, fallbacks. |
 | `HANDOFF.md` | Full session history, what's verified, what's blocked, exact resume commands. |
 | `GLOSSARY.md` | Every technical term used, explained (pt-PT). |
 | `OPTIMIZATION.md` | Cost & latency plan — done vs next, with measurements. |
 | `HEALTH.md` | Incident runbook — each failure mode → symptom → check → fix. |
-| `PROFILE.md` | What this demonstrates, for the CV / interview talking points. |
+| `PROFILE.md` | What this project demonstrates — portfolio positioning + CV bullets. |
 | `CLAUDE.md` | Instructions for Claude Code working in this repo. |
 | `listener/AWS.md` | AWS account setup, IAM policy, model access. |
 | `extension/VERIFY.md` | How the extension was verified + the one-time manual pass. |

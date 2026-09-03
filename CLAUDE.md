@@ -15,13 +15,16 @@ in; clone patterns by hand if useful.
 Raphael lives in Portugal. **Communicate in European Portuguese (pt-PT), never
 pt-BR.** Code, comments, commit messages in English.
 
-## Why this exists (read before suggesting commercialisation)
+## Why this exists
 
-Built to demo for the **Neurons Lab "Voice Copilot Architect" role** — the client
-is a US veterinary hospice network, PE-sponsored. This project deliberately mirrors
-their product. As a portfolio piece shown to them: strong. As a product to sell:
-conflict of interest + likely non-compete/confidentiality exposure. If Raphael
-asks about selling it, flag the timing risk and suggest a *different vertical*.
+A portfolio piece exploring **ambient AI** — a copilot that listens to a live
+two-party call (a veterinary care coordinator + a pet family in an end-of-life
+context), transcribes it, and extracts scheduling/clinical fields in real time.
+Companion to `~/voice-demo` (voice *bots that talk*); this one never speaks.
+Raphael modelled the product to learn the problem hands-on; it is not tied to any
+employer or client. If he asks about turning it into a product, it's viable in
+several verticals (real-estate showings, recruiting screens, insurance FNOL) —
+the code is domain-light.
 
 ## Architecture
 
@@ -116,10 +119,16 @@ Workflow: branch per task → push → `gh pr create` → user merges to main.
 Commit style: feat(listener): … / fix(web): … / docs: …
 ```
 
+## Tooling
+
+- `langfuse` CLI installed globally (`npm i -g langfuse-cli`). `langfuse api
+  observations list` reads the eval traces; `traces list` is the deprecated v3
+  endpoint — don't use it.
+
 ## Reference
 
 - Full session history & decisions: `HANDOFF.md`
-- Requirement → evidence + numbers: `INTERVIEW.md`
+- Claim → evidence + numbers: `EVIDENCE.md`
 - Incident runbook: `HEALTH.md`
 - Cost/latency plan: `OPTIMIZATION.md`
 - AWS setup: `listener/AWS.md`

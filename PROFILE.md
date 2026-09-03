@@ -1,7 +1,7 @@
 # call-copilot — o que este projeto acrescenta ao teu perfil
 
 Análise honesta do que construíste e verificaste vs. o que está escrito mas por
-correr. Base para actualizar CV / LinkedIn.
+correr. Base para CV, LinkedIn e posicionamento de portefólio.
 
 ---
 
@@ -16,10 +16,10 @@ correr. Base para actualizar CV / LinkedIn.
   Transcribe fecha em silêncio). Fix de fiabilidade: conclusão de chamada 30% → 100%
   no fixture.
 - **Briefing por email** — AWS SES, email real enviado e recebido.
-- **Golden-set eval (lado Gemini)** — 25 amostras difíceis, métricas de accuracy
-  fonética (metaphone), WER, Levenshtein normalizado. Resultado: nomes 60% phonetic;
-  **achado analítico** — 100% das falhas são o STT a estropiar fonemas não-ingleses,
-  o LLM é fiel ao transcript. Conclusão: a alavanca de accuracy é o STT.
+- **Golden-set eval** — 25 amostras difíceis, métricas fonéticas (metaphone), WER,
+  Levenshtein. **Achado:** as falhas são o STT a estropiar fonemas não-ingleses,
+  o LLM é fiel ao transcript. A alavanca de accuracy é o STT. (A/B completo na
+  secção abaixo.)
 - **Concorrência + isolamento de dados** — 6 salas LiveKit em paralelo, sem falhas,
   assert de isolamento cross-session passa.
 - **Optimização de custo** — debounce: **−69% de chamadas ao LLM** (13→4 no
@@ -137,9 +137,8 @@ correr. Base para actualizar CV / LinkedIn.
   houve uma chamada LiveKit ao vivo completa (bloqueio de Wi-Fi/CGNAT).
 - ✅ Já podes afirmar: A/B Haiku vs Gemini com números; Langfuse com traces reais
   (token+custo); extensão a preencher o formulário; extração e2e (sem LiveKit).
-- ⚠️ Cuidado ao mostrar/descrever — o domínio (hospício veterinário, VCC) é o
-  produto exacto do cliente da Neurons Lab. Como portfolio *para eles*: forte.
-  Publicamente / para vender: reposiciona para outro vertical.
+- Para vender como produto: reposiciona para outro vertical (imobiliário,
+  recrutamento, seguros FNOL). O código é domain-light.
 
 ---
 

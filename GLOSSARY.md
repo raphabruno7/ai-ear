@@ -1,7 +1,7 @@
 # Glossário — call-copilot
 
 Todas as expressões técnicas usadas nas conversas sobre o projeto, explicadas.
-Organizado por tema. Serve de preparação para a entrevista (Neurons Lab).
+Organizado por tema. Serve de base para conteúdo, CV, e para retomar o projeto.
 
 ---
 
@@ -51,6 +51,17 @@ pré-registados.
 Notação fonética. O Transcribe deixa-te especificar a *pronúncia* de um termo em
 IPA, para os casos que a ortografia não resolve.
 
+**Alternativas de STT** (as que importam para tempo real)
+- **Deepgram Nova-3** — feito para streaming; keyterm prompting; ~3× mais barato
+  que o Transcribe; melhor em nomes com sotaque.
+- **Speechmatics** — o melhor em inglês com sotaque; sub-500ms; um modelo por
+  língua cobre todas as variantes regionais.
+- **gpt-4o-transcribe** (OpenAI) — modo realtime via Realtime API; forte.
+- **Whisper** (`whisper-1`) — boa accuracy mas **batch** (lento); inútil para uma
+  chamada ao vivo a menos que o corras tu no SageMaker com margem de latência.
+- **AWS Transcribe** (o desta build) — o managed nativo da AWS; fraco em fonemas
+  não-ingleses. Testado de propósito para responder "o default chega?" — não chega.
+
 **WPM (words per minute)**
 Ritmo de fala. Fala de telefone descontraída ≈ 150 wpm. O `bench_latency.py`
 usa isto para simular a cadência real da chamada.
@@ -74,7 +85,7 @@ métricas. `eval/run.py`.
 
 **A/B (teste A/B de modelos)**
 Correr o *mesmo* input por dois modelos e comparar. Aqui: Claude Haiku 4.5
-(Bedrock) vs Gemini 3.6 Flash (Vertex). A vaga pede exatamente isto.
+(Bedrock) vs Gemini 3.6 Flash (Vertex). Mesma entrada, dois modelos, comparar.
 
 **Exact match**
 O output é *idêntico* ao esperado (depois de normalizar maiúsculas/espaços).
@@ -154,8 +165,8 @@ todos aparecerem. Métrica de UX do agent-assist. `bench_latency.py` mede-a.
 p50 = mediana (metade das chamadas é mais rápida). p95 = 95% são mais rápidas
 que isto; captura os piores casos. Padrão para reportar latência.
 
-**"remove ~1 min lag on one field type"** (frase da vaga)
-Referia-se a um campo que demorava ~1 min a aparecer. Aqui esse campo é o
+**"~1 min lag on one field type"**
+Uma ideia comum: um campo que demorava ~1 min a aparecer. Aqui esse campo é o
 `preferred_time` — mas o atraso é *posição no transcript* (a marcação só é
 combinada perto do fim), não o extrator. Mitigação: o `finalize()`.
 
@@ -342,7 +353,12 @@ latência, custo, erros — para depurar e otimizar.
 
 **Langfuse**
 Plataforma de observability para apps de LLM. Guarda "traces" e mostra-os num
-dashboard. A vaga nomeia-a duas vezes.
+dashboard. Standard para observability de LLMs.
+
+**`langfuse` CLI** (`npm i -g langfuse-cli`, oficial)
+Fala com a API da Langfuse a partir da linha de comandos. `langfuse api
+observations list` (v4 — `traces list` é o endpoint v3, deprecado). Lê as chaves
+de `LANGFUSE_*` ou de `--env .env`.
 
 **Trace / span**
 - *Trace*: um pedido/operação completa.
@@ -419,8 +435,7 @@ Ficheiro versionado que altera o schema da base de dados
 
 **RLS (Row-Level Security)**
 Regras do Postgres que filtram *que linhas* cada utilizador vê. A migração `005`
-adiciona políticas por `vcc_id` — a "história de isolamento multi-tenant" que a
-vaga pede. Ainda não aplicada.
+adiciona políticas por `vcc_id` (isolamento multi-tenant). Aplicada 2026-09-02.
 
 **service_role key vs anon key**
 - *anon*: chave pública, sujeita a RLS.
@@ -458,7 +473,7 @@ mostra.
 
 **Load test / concorrência**
 Abrir N salas LiveKit ao mesmo tempo e verificar que aguentam e que a sessão A
-nunca vê dados da sessão B. Testado com 6 salas. A vaga pede "5–10+".
+nunca vê dados da sessão B. Testado com 6 salas.
 
 **Data isolation assert**
 O teste que confirma programaticamente que não há fuga de dados entre sessões.
@@ -469,12 +484,11 @@ O teste que confirma programaticamente que não há fuga de dados entre sessões
 
 **Portfolio piece / prova de portfólio**
 Não é um produto para vender — é código real, hands-on, com números, para
-mostrar numa entrevista. (Vender este projeto durante o processo com a Neurons
-Lab seria conflito de interesses.)
+mostrar (portefólio, conteúdo). Não está ligado a nenhum empregador nem cliente.
 
-**Gap → vaga**
-O plano mapeia cada requisito da vaga (A–H) a uma peça a construir. "Fechar um
-gap" = levá-lo de "zero" a "feito, com evidência".
+**Gap**
+Uma peça em falta (STT, extração, eval, extensão…). "Fechar um gap" = levá-lo
+de "zero" a "feito, com evidência e números".
 
 **e2e (end-to-end)**
 Teste do fluxo completo: chamada real → transcrição → extração → campos na base

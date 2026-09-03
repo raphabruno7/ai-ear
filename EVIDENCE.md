@@ -6,8 +6,10 @@ as the call runs, and writes them into the scheduling form via a Chrome
 extension. Companion piece: [`voice-demo`](../voice-demo) — six *talking* voice
 bots. This one never speaks.
 
-Built to mirror the target stack: **AWS Bedrock / Transcribe / SES**, golden-set
-evals, Langfuse, concurrency + data-isolation testing, per-call cost.
+Explores **ambient AI** hands-on: streaming STT, real-time structured extraction,
+golden-set accuracy evals, Langfuse tracing, concurrency + data-isolation, per-call
+cost. Stack: AWS (Transcribe / Bedrock / SES), Google Cloud (Vertex AI), Supabase,
+Next.js.
 
 ## Pipeline
 
@@ -25,9 +27,9 @@ Supabase (extracted_fields, call_costs)  +  WebSocket ──► Chrome extension
 AWS SES ──► pre-visit briefing email (per session)
 ```
 
-## Requirement → evidence
+## What an ambient copilot needs → evidence
 
-| Job asks for | In this repo |
+| Capability | In this repo |
 |---|---|
 | Agent-assist / live transcription copilot | the whole system — `listener/agent.py` |
 | Streaming STT, turn handling, low-latency | `listener/transcribe_stream.py` — AWS Transcribe streaming, per-speaker, reopen-on-silence |
@@ -72,20 +74,20 @@ AWS SES ──► pre-visit briefing email (per session)
   the STT leg).
 - **Concurrency:** 6 LiveKit rooms opened in parallel — all connect + publish,
   no failures, wall 14–19 s each, cross-session data-isolation assert passes.
-  (Job bar: 5–10+ concurrent calls.)
 - **Eval — full A/B, Haiku 4.5 vs Gemini 3.6 Flash, 25 hard samples:**
 
-  | model | names exact | names phonetic | names WER | emails exact |
-  |---|--:|--:|--:|--:|
-  | Gemini 3.6 Flash (Vertex AI) | 47% | 67% | 0.43 | 30% |
-  | Claude Haiku 4.5 (Bedrock)   | 40% | 60% | 0.59 | 30% |
+  | model (fast tier — not frontier) | names exact | names phonetic | emails exact |
+  |---|--:|--:|--:|
+  | Gemini 3.6 Flash (Vertex AI) | ~40–47% | ~60–67% | 30% |
+  | Claude Haiku 4.5 (Bedrock)   | 40% | 60% | 30% |
 
-  Gemini marginally ahead on names, tied on emails. **The two models miss the
-  same samples** — "Aoife Ní Bhraonáin" → "Aoife Ibra Oman", "Seán Mac
-  Cárthaigh" → "Sean McCarvey" — because the input transcript is identical.
-  **Every miss is AWS Transcribe (en-US) mangling non-English phonemes; the LLM
-  output is faithful to the transcript.** Conclusion: the accuracy lever is
-  **STT** (custom vocabulary, or a more accent-robust model), not LLM choice.
+  **The two models — different vendor, different architecture — miss the same
+  samples.** "Seán Mac Cárthaigh" → "Sean McCarvey" on both, because the input
+  transcript is identical and already wrong. `eval/report.md` → "STT is the
+  bottleneck" prints the proof: `expected | what Transcribe heard | each model's
+  output`. The model columns just echo a broken transcript. Recovering the
+  original would be hallucination, not reasoning. **The accuracy lever is the
+  transcription layer** — `OPTIMIZATION.md` has the vendor comparison + ranked plan.
 - **Extraction runs on Vertex AI** (`GCP_PROJECT` set → Vertex, else AI Studio
   key). Bedrock left wired for the A/B — `EXTRACT_BACKEND` toggles at runtime.
   The `_emit → merge → _persist → extracted_fields` path is verified end-to-end.
@@ -104,13 +106,15 @@ AWS SES ──► pre-visit briefing email (per session)
 - **Listener e2e with real fields into the dashboard** — needs a stable Wi-Fi;
   LiveKit media (WebRTC UDP) fails on cellular/CGNAT. Extraction + persist path
   already verified without LiveKit.
-- **STT accuracy lever** — custom Transcribe vocabulary (or a second STT in the
-  eval harness) to close the non-English-name gap. Not yet done.
-- **Extension MV3 shell** — one manual load-unpacked pass before demoing (the
-  WS+fill logic is already verified programmatically).
+- **STT accuracy lever** — Transcribe custom vocabulary, then benchmark Deepgram
+  Nova-3 as a second STT (same A/B method as the LLMs). `OPTIMIZATION.md`.
+- **3rd model in the A/B** — add gpt-4o-mini so "swap the model, same misses"
+  holds across 3 vendors.
+- **Extension MV3 shell** — one manual load-unpacked pass (the WS+fill logic is
+  already verified programmatically).
 
-## Honest gaps (interview, not repo)
+## What this is not
 
-6+ yrs AI/ML history · consulting seniority under UAT · PE-rollout experience ·
-US/ET overlap · "shipped to real users at scale" (these are strong *artifacts*,
-not a deployed product with a user base).
+A deployed product with real users. It's a hands-on model of the problem, verified
+in fixtures + programmatic tests. The live LiveKit call e2e is the one piece not
+yet run end to end (blocked on a stable network, not code).

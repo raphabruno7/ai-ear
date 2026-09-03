@@ -12,12 +12,13 @@ or a small chore. Priority order:
 
 | # | Item | Blocked on | Effort |
 |---|---|---|---|
-| 1 | **Listener e2e with a live LiveKit call** → real `extracted_fields` + LLM `call_costs` row → `/session/<id>`, `/costs`, fill `INTERVIEW.md` | **Stable Wi-Fi** (WebRTC media fails on cellular/CGNAT — see §0). Code path is robust. | 20 min on Wi-Fi |
+| 1 | **Listener e2e with a live LiveKit call** → real `extracted_fields` + LLM `call_costs` row → `/session/<id>`, `/costs`, fill `EVIDENCE.md` | **Stable Wi-Fi** (WebRTC media fails on cellular/CGNAT — see §0). Code path is robust. | 20 min on Wi-Fi |
 | 2 | `briefing.py --session <id>` for that real session | item 1 | 2 min |
-| 3 | **Langfuse screenshot** — open one `eval:gemini-flash` trace, screenshot for `INTERVIEW.md` | nothing (traces are live) | 2 min |
+| 3 | **Langfuse screenshot** — open one `eval:gemini-flash` trace, screenshot for `EVIDENCE.md` | nothing (traces are live) | 2 min |
 | 4 | **STT custom vocabulary** (the accuracy lever) — create a vocab of hard owner/pet names, wire `VocabularyName` into `transcribe_stream.py` + `eval/models.py`, re-run eval, show the delta | add `transcribe:CreateVocabulary` / `GetVocabulary` / `ListVocabularies` / `DeleteVocabulary` to the `call-copilot-policy` IAM policy (AWS console) | ~1 h after IAM |
 | 5 | **Prompt-audit fixes** F1–F3 (see the audit output, 2026-09-02) — F2 matters: `eval/models.py:21` example `"Kathleen O'Brien"` is the gold answer for sample `n01`. Fix + re-run the A/B. | nothing | 15 min |
-| 6 | **GPT in the A/B** — the job wording is "Haiku vs GPT"; the repo did Haiku vs Gemini. Add an `openai` backend to `eval/models.py`. | `OPENAI_API_KEY` | 30 min |
+| 6 | **3rd model in the A/B** — add an `openai` backend to `eval/models.py` (gpt-4o-mini) so the "swap the model, same misses" point holds across 3 vendors, not 2. | `OPENAI_API_KEY` | 30 min |
+| 4b | **Benchmark a 2nd STT** — same A/B method as the LLMs, but for transcription: Deepgram Nova-3 / Speechmatics / gpt-4o-transcribe vs AWS Transcribe on the golden set. This is the *real* accuracy lever (see `OPTIMIZATION.md`). | a Deepgram key (free tier) | ~2 h |
 | 7 | **Deploy** — `listener/` → Railway (Dockerfile + railway.toml ready), `web/` → Vercel. Add CI. | Railway + Vercel accounts/tokens | half a day |
 | 8 | **Extension MV3 manual pass** — one `chrome://extensions` → Load unpacked → confirm badge ● + fill (WS+fill logic already verified programmatically, `extension/VERIFY.md`) | nothing | 10 min |
 | 9 | **Bedrock support case** — still open? if the throttle cleared (it did on 2026-09-02), nothing to do; the A/B already ran both sides | — | — |
@@ -30,7 +31,25 @@ token+cost), #3 (DEMO.md + PROFILE.md refresh).
 
 ---
 
-## 0. Session log (2026-08-31 → 09-02)
+## 0. Session log
+
+### 2026-09-03
+- **Reframe** — the project is no longer positioned around a specific job/company.
+  Client name removed from all docs. It's a hands-on portfolio piece on **ambient
+  AI**. `INTERVIEW.md` → `EVIDENCE.md`.
+- **`eval/report.md` now proves the STT-bottleneck finding** — new
+  `## STT is the bottleneck` section: `sample | expected | what Transcribe heard
+  | each model's output`. The model columns just echo a broken transcript.
+- **`eval/models.extract_gemini` → JSON mode** (`response_mime_type` + `{"value"}`
+  envelope). Gemini 3.6 Flash was occasionally narrating instead of answering on
+  hard emails; matches how the listener's `_emit_gemini` already works.
+- **`OPTIMIZATION.md`** — STT section rewritten: vendor comparison (Deepgram /
+  Speechmatics / gpt-4o-transcribe / Whisper-is-batch) + ranked plan.
+- **`langfuse` CLI installed** (`npm i -g langfuse-cli`, official). Use
+  `langfuse api observations list` (v4); `traces list` is the deprecated v3 path.
+- PRs #4 (PENDING list), #5 (STT-bottleneck section) merged.
+
+### 2026-08-31 → 09-02
 
 - **Extraction now runs on Vertex AI (Google Cloud).** `_genai_client()` in
   `extract.py` + `eval/models.py` use Vertex when `GCP_PROJECT` is set (ADC auth,
@@ -73,7 +92,7 @@ token+cost), #3 (DEMO.md + PROFILE.md refresh).
   full transcript → `finalize()` in one go.
   **Next:** retry the §8 e2e on a stable network (mode 1 is pure connectivity);
   the code path is now robust once a run completes. Then `/session/<id>` +
-  fill `INTERVIEW.md`.
+  fill `EVIDENCE.md`.
 - **Root cause of the connectivity failure:** default route gateway `172.20.10.1`
   + `en14` marked `constrained` = the machine was on an **iPhone Personal
   Hotspot**. CGNAT on cellular breaks WebRTC UDP hole-punching — signalling
@@ -96,19 +115,17 @@ veterinary care coordinator (VCC) and a pet family. It never speaks. It:
 4. pushes each field to a Chrome extension that fills the scheduling form,
 5. sends the vet a pre-visit briefing email via AWS SES after the call.
 
-**Built as a portfolio piece for the Neurons Lab "Voice Copilot Architect"
-role.** The client is a US veterinary hospice network, PE-sponsored. The project
-deliberately mirrors their product so the demo says "I understand your problem".
+**A portfolio piece exploring ambient AI** — clinical software that listens and
+writes the record instead of talking. Raphael modelled the product to learn the
+problem hands-on; it is **not tied to any employer or client**.
 
 Companion repo: `~/voice-demo` — six *talking* voice bots (Hume, LiveKit/Gemini
 Live, ElevenLabs, Vapi, Retell, Twilio). Framing: "bots that talk" (voice-demo)
 vs "a copilot that listens" (call-copilot). **Keep them separate.**
 
 ### Commercialisation note
-Selling this as a product while pursuing / during the Neurons Lab engagement is a
-conflict of interest + likely non-compete/confidentiality exposure. Safe path if
-Raphael wants a product: a *different vertical* (real-estate showings, recruiting
-screens, insurance FNOL intake), own research, no client data or roadmap.
+The code is domain-light and viable in several verticals (real-estate showings,
+recruiting screens, insurance FNOL). No client data or roadmap is involved.
 
 ---
 
@@ -121,7 +138,7 @@ across ~21 commits. All infra accounts were created live during the session.
 
 Original plan decisions (all still hold):
 - **New repo**, cloning patterns from voice-demo by hand (not a dependency).
-- **AWS Transcribe** for STT (maximises the AWS story the role wants).
+- **AWS Transcribe** for STT (AWS-native managed service; benchmarked against alternatives in `OPTIMIZATION.md`).
 - **Prova de portfolio** depth — one small real artifact per gap + numbers.
 - **Golden-set** = ~25 TTS-synthesised hard names/emails + a few real.
 - A/B second model was "Gemini 2.5 Flash" → now **Gemini 3.6 Flash** (2.5 retired
@@ -147,7 +164,7 @@ not through the Next app.
 | 6 | Chrome extension + demo-scheduler | ✅ MV3 + WS fan-out; WS+fill path verified against the real page 2026-09-02 (`extension/VERIFY.md`, `docs/extension-fill-verified.jpg`); MV3 shell still needs one manual load-unpacked pass |
 | 7 | load test + isolation | ✅ 6 concurrent LiveKit rooms, no failures, isolation assert PASS; extraction rows 0 (Gemini quota) |
 | 8 | cost tracking + optimisation | ✅ `call_costs`, `/costs`, debounce (~70% fewer LLM calls), `OPTIMIZATION.md` |
-| 9 | interview writeup | ✅ `INTERVIEW.md` (requirement → evidence + real numbers) |
+| 9 | evidence writeup | ✅ `EVIDENCE.md` (claim → evidence + real numbers) |
 | — | incident handling | ✅ `HEALTH.md`, `web/api/health`, `listener/healthcheck.py` (4/4 ok) |
 | — | RLS policies | ✅ `005_rls_policies.sql` **run 2026-09-02** in Supabase |
 | — | agent-assist metrics | ✅ `/session/[id]` shows fields-on-screen, time-to-first-field, time-to-all-fields |
@@ -299,14 +316,14 @@ enable (Flash is ~free — cents for the whole eval). Then remove/lower the
 with input (transcript+kind), output, and metadata (expected, sample id).
 `smoke_langfuse.py` sends one on demand.
 Traces: https://cloud.langfuse.com/project/cmtk3gub6013qad0cxmnpkjmf/traces
-**Left:** screenshot one opened trace for `INTERVIEW.md`.
+**Left:** screenshot one opened trace for `EVIDENCE.md`.
 **To finish (~10 min, no Wi-Fi needed):**
 1. Free project at https://cloud.langfuse.com → Settings → API Keys.
 2. In `.env`: `LANGFUSE_PUBLIC_KEY=pk-lf-…`, `LANGFUSE_SECRET_KEY=sk-lf-…`
    (`LANGFUSE_HOST` is already `https://cloud.langfuse.com`).
 3. `cd listener && .venv/bin/python smoke_langfuse.py` → prints a trace URL.
 4. `cd eval && ../listener/.venv/bin/python run.py --models gemini-flash` →
-   traces populate. Screenshot for `INTERVIEW.md`.
+   traces populate. Screenshot for `EVIDENCE.md`.
 
 ---
 
@@ -323,7 +340,7 @@ Traces: https://cloud.langfuse.com/project/cmtk3gub6013qad0cxmnpkjmf/traces
      real LLM cost line.
 4. Briefing for that session: `.venv/bin/python briefing.py --session <id>`.
 5. Fill in the real extraction-latency p50/p95 and A/B accuracy numbers in
-   `INTERVIEW.md` (currently marked "pending quota").
+   `EVIDENCE.md` (currently marked "pending quota").
 
 ---
 
@@ -334,7 +351,7 @@ Traces: https://cloud.langfuse.com/project/cmtk3gub6013qad0cxmnpkjmf/traces
 2. ~~Run migration 005~~ ✅ done.
 3. **Langfuse** — keys + one run + screenshot (~30 min).
 4. **Full A/B** once Bedrock is back — Haiku vs Gemini on the 25-sample set,
-   write the comparison into `INTERVIEW.md`.
+   write the comparison into `EVIDENCE.md`.
 5. **Playwright E2E** for the extension (`webapp-testing` skill) — load unpacked,
    push via WS, assert `demo-scheduler` fills. (Deferred — Playwright-for-extension
    setup is heavy.)
