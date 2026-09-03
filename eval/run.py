@@ -56,6 +56,7 @@ async def main() -> None:
     run_id = time.strftime("%Y%m%d-%H%M%S")
     sb = _supabase()
     results: list[dict] = []
+    transcripts: dict[str, str] = {}   # sample_id -> what AWS Transcribe heard
 
     for s in rows:
         wav = AUDIO / f"{s['id']}.wav"
@@ -67,6 +68,7 @@ async def main() -> None:
         except Exception as e:  # noqa: BLE001 — network blip, skip this sample
             print(f"  {s['id']:>4} transcribe ERROR {e!r}"[:160])
             continue
+        transcripts[s["id"]] = transcript
         for model in args.models:
             with span(f"eval:{model}", input={"transcript": transcript, "kind": s["kind"]}) as sp:
                 try:
@@ -92,7 +94,7 @@ async def main() -> None:
             await asyncio.sleep(args.sleep)
 
     trace_flush()
-    _report(run_id, args.models, results)  # always, from memory
+    _report(run_id, args.models, results, transcripts)  # always, from memory
 
     # Supabase is best-effort — a network blip must not lose the run.
     if sb and results:
@@ -103,7 +105,8 @@ async def main() -> None:
             print(f"eval_runs write skipped: {e!r}")
 
 
-def _report(run_id: str, models: list[str], results: list[dict]) -> None:
+def _report(run_id: str, models: list[str], results: list[dict],
+            transcripts: dict[str, str] | None = None) -> None:
     lines = [f"# Eval run {run_id}", ""]
     lines.append("| model | kind | n | exact | phonetic | mean WER | mean lev |")
     lines.append("|---|---|--:|--:|--:|--:|--:|")
@@ -120,6 +123,31 @@ def _report(run_id: str, models: list[str], results: list[dict]) -> None:
                 f"{sum(r['wer'] for r in rs)/n:.3f} | "
                 f"{sum(r['lev_norm'] for r in rs)/n:.3f} |"
             )
+    # Where every model missed the same sample: the LLM is faithful to the
+    # transcript — the miss is upstream in the STT. This section makes that visible.
+    if transcripts and len(models) > 1:
+        by_sample: dict[str, dict[str, str]] = {}
+        for r in results:
+            by_sample.setdefault(r["sample_id"], {})[r["model"]] = r["got"]
+        shared = [sid for sid, gm in by_sample.items()
+                  if len(gm) == len(models)
+                  and all(not x["phonetic_ok"] for x in results if x["sample_id"] == sid)]
+        if shared:
+            lines += ["", "## STT is the bottleneck", "",
+                      "Samples **every** model got wrong — because AWS Transcribe "
+                      "mis-heard the audio and both models faithfully returned what "
+                      "they were given:", "",
+                      "| sample | expected | Transcribe heard | " +
+                      " | ".join(models) + " |",
+                      "|---|---|---|" + "---|" * len(models)]
+            def _cell(s: str) -> str:
+                return (s or "").replace("`", "").replace("|", "\\|").strip()
+            for sid in sorted(shared):
+                exp = next(r["expected"] for r in results if r["sample_id"] == sid)
+                heard = _cell(transcripts.get(sid, ""))
+                got = " | ".join(f"`{_cell(by_sample[sid][m])}`" for m in models)
+                lines.append(f'| {sid} | `{_cell(exp)}` | "{heard}" | {got} |')
+
     lines += ["", "## Misses", ""]
     for r in results:
         if not r["phonetic_ok"]:
