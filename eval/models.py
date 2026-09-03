@@ -92,10 +92,13 @@ def extract_gemini(transcript: str, kind: str) -> str:
         genai.Client(api_key=os.environ["GEMINI_API_KEY"])
     )
     # Gemini 3.x counts thinking tokens against max_output_tokens and rejects
-    # thinking_budget=0 for flash — so just give it ample room.
-    cfg = types.GenerateContentConfig(temperature=0, max_output_tokens=2000)
+    # thinking_budget=0 for flash — so give it room. JSON mode + an explicit
+    # envelope stops it from narrating instead of answering (seen on hard emails).
+    cfg = types.GenerateContentConfig(
+        temperature=0, max_output_tokens=2000, response_mime_type="application/json",
+    )
     model = os.environ.get("GEMINI_MODEL_ID", "gemini-3.6-flash")
-    prompt = _PROMPT.format(kind=kind, transcript=transcript)
+    prompt = _PROMPT.format(kind=kind, transcript=transcript) + '\nReturn {"value": "<the value>"}.'
 
     LAST_USAGE.clear()
     last: Exception | None = None
@@ -107,7 +110,12 @@ def extract_gemini(transcript: str, kind: str) -> str:
                 LAST_USAGE.update(input=getattr(m, "prompt_token_count", 0) or 0,
                                   output=getattr(m, "candidates_token_count", 0) or 0,
                                   backend="gemini", model=model)
-            return _clean((resp.text or "").strip())
+            txt = (resp.text or "").strip()
+            try:
+                txt = json.loads(txt).get("value", txt)
+            except (json.JSONDecodeError, AttributeError):
+                pass
+            return _clean(str(txt))
         except Exception as e:
             last = e
             r = repr(e)
@@ -121,7 +129,10 @@ def extract_gemini(transcript: str, kind: str) -> str:
 
 
 def _clean(s: str) -> str:
-    s = s.strip().strip("`").strip('"').strip("'").strip()
+    s = s.strip().strip("`\"'").strip()
+    if s.startswith("-> "):
+        s = s[3:]
+    s = s.strip("`\"'? ").strip()
     for pre in ("the name is", "the email is", "name:", "email:", "answer:"):
         if s.lower().startswith(pre):
             s = s[len(pre):].strip()
