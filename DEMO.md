@@ -1,7 +1,8 @@
-# DEMO — como apresentar o call-copilot numa entrevista
+# DEMO — como apresentar o call-copilot
 
-~5–8 min. Tudo aqui corre **sem uma chamada LiveKit ao vivo** (essa parte está
-bloqueada em Wi-Fi/CGNAT — ver `HANDOFF.md`). O pipeline mostra-se por peças.
+Runbook de 5–8 min para uma demo (vídeo, chamada, apresentação). Tudo aqui corre
+**sem uma chamada LiveKit ao vivo** (essa parte está bloqueada em Wi-Fi/CGNAT —
+ver `HANDOFF.md`). O pipeline mostra-se por peças.
 
 ## Antes de começar (5 min)
 

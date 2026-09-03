@@ -42,7 +42,37 @@ Real numbers: `listener/pricing.py` (snapshot), `/costs` dashboard, `eval/report
 - **STT stream reopen on silence** instead of holding one stream open (Transcribe
   bills per second of audio sent, not wall-clock).
 
-## Next
+## The accuracy lever is STT, not the LLM
+
+The A/B (`eval/report.md` → "STT is the bottleneck") shows Claude Haiku 4.5 and
+Gemini 3.6 Flash **miss the same samples** — because the transcript is identical
+and already wrong. `"Seán Mac Cárthaigh"` arrives as `"Sean McCarvey"`; no model
+recovers the original without hallucinating. Swapping or upgrading the LLM does
+not move the number. The transcription layer does.
+
+**Why AWS Transcribe is in this build:** it's the AWS-native managed STT, so
+"is the cloud default good enough?" is a fair question to answer in practice.
+The answer, on hard non-English names: no.
+
+**The landscape** (from testing, not just reading):
+
+| Option | Streaming | Non-English names / accent | Notes |
+|---|---|---|---|
+| **AWS Transcribe** (here) | ✅ | weak | custom vocabulary + IPA pronunciation + custom language model can help |
+| **Deepgram Nova-3** | ✅ (built for it) | good | keyterm prompting (inline domain terms); ~3× cheaper than Transcribe |
+| **Speechmatics** | ✅ (sub-500ms) | best on accented English | one model per language covers all regional variants |
+| **gpt-4o-transcribe** | ✅ (Realtime API) | good | OpenAI-hosted |
+| **Whisper** (`whisper-1`) | ❌ batch | good accuracy | too slow for a live call; deployable on SageMaker if latency budget allows |
+
+**Ranked plan:**
+1. **AWS Transcribe custom vocabulary** — stays fully in AWS, costs nothing;
+   feed common owner/pet surnames + the golden-set hard terms; re-run the eval,
+   show the delta. (Needs `transcribe:CreateVocabulary` on the IAM policy.)
+2. **Benchmark Deepgram Nova-3** as a 2nd STT in `eval/models.py` — same A/B
+   method as the LLMs. "Swappable, benchmarked STT backend" mirrors the LLM story.
+3. Custom language model on Transcribe, or Speechmatics, if 1–2 fall short.
+
+## Next (cost / latency)
 - **Prompt caching** (Bedrock): the system prompt + tool schema are constant —
   cache them, pay input tokens only for the growing transcript delta.
 - **Sliding-window transcript**: send the last ~40s, not the whole call. Caps
@@ -51,6 +81,3 @@ Real numbers: `listener/pricing.py` (snapshot), `/costs` dashboard, `eval/report
   twice), stop re-extracting it — shrink the schema per turn.
 - **Cheaper model for trivial fields**: visit_type / preferred_time don't need a
   frontier model; route only name/email (phonetic-hard) to the better one.
-- **The real lever for accuracy is STT** — eval shows every miss is AWS Transcribe
-  mangling non-English names. Add a Transcribe custom vocabulary of common
-  owner/pet names, or evaluate a multilingual STT (Deepgram, Whisper).
