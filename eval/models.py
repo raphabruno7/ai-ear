@@ -25,7 +25,8 @@ _PROMPT = (
 )
 
 
-async def transcribe_file(path: str, region: str, language: str = "en-US") -> str:
+async def transcribe_file(path: str, region: str, language: str = "en-US",
+                          vocab: str | None = None) -> str:
     from amazon_transcribe.client import TranscribeStreamingClient
     from amazon_transcribe.handlers import TranscriptResultStreamHandler
     from amazon_transcribe.model import TranscriptEvent
@@ -40,7 +41,8 @@ async def transcribe_file(path: str, region: str, language: str = "en-US") -> st
 
     client = TranscribeStreamingClient(region=region)
     stream = await client.start_stream_transcription(
-        language_code=language, media_sample_rate_hz=16_000, media_encoding="pcm"
+        language_code=language, media_sample_rate_hz=16_000, media_encoding="pcm",
+        vocabulary_name=vocab or None,
     )
 
     async def pump():

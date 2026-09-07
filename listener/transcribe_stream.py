@@ -52,11 +52,13 @@ class _Handler(TranscriptResultStreamHandler):
 
 
 class TranscribeSession:
-    def __init__(self, speaker: str, on_final: OnFinal, region: str, language: str = "en-US"):
+    def __init__(self, speaker: str, on_final: OnFinal, region: str, language: str = "en-US",
+                 vocabulary: str | None = None):
         self.speaker = speaker
         self.on_final = on_final
         self.region = region
         self.language = language
+        self.vocabulary = vocabulary or None
         self._total_seconds = 0.0
         self._stream = None
         self._handler_task: asyncio.Task | None = None
@@ -115,6 +117,7 @@ class TranscribeSession:
         client = TranscribeStreamingClient(region=self.region)
         self._stream = await client.start_stream_transcription(
             language_code=self.language, media_sample_rate_hz=16_000, media_encoding="pcm",
+            vocabulary_name=self.vocabulary,
         )
         # result.end_time restarts at 0 for the new stream — reset the mark table.
         # ponytail: mid-stream trim above can drop marks for a >60s continuous

@@ -96,6 +96,24 @@ AWS SES ──► pre-visit briefing email (per session)
   Recovering the original would be hallucination, not reasoning. **The accuracy
   lever is the
   transcription layer** — `OPTIMIZATION.md` has the vendor comparison + ranked plan.
+- **STT custom vocabulary — measured, 2026-09-07.** `eval/build_vocab.py` seeds
+  AWS Transcribe with the golden-set owner surnames (in production: the clinic's
+  patient roster). Phrases-list format — it biases what Transcribe *hears*.
+  Where it lands, it fixes the transcript at the source:
+
+  | sample | Transcribe heard — before | with vocabulary |
+  |---|---|---|
+  | n07 `Michał Wojciechowski` | "Mitchell **Wozkowski**" | "Mitchell **Wojciechowski**" |
+  | n05 `Nguyen Thi Hoa` | "**Nguyenihoa**" | "**Nguyen** … **Hoa**" |
+  | e06 `…@icloud.com` | "@**iCloud**.com" | "@**icloud**.com" |
+
+  Downstream field accuracy moved but within noise: names phonetic flat at ~60%
+  (both models), names exact 33–47% → 33–53% across runs — the metric wobbles
+  ±2 samples on n=15 with non-deterministic formatting. Emails (**not** seeded —
+  control) stayed flat at 30%. The residual phonetic misses ("Aoife Ní
+  Bhraonáin", "Xiuying Zhang", first-name "Michał"→"Mitchell") are acoustic, not
+  spelling — a Phrases list can't reach them; `SoundsLike` (S3 table format) or a
+  second STT can.
 - **Full live e2e — verified 2026-09-07.** LiveKit room → 2 simulated speakers →
   per-speaker AWS Transcribe → Gemini extraction (Vertex AI) → `extracted_fields`
   + `call_costs` in Supabase → `/session/<id>` + `/costs`. Two consecutive runs:
@@ -137,8 +155,9 @@ AWS SES ──► pre-visit briefing email (per session)
 
 ## Pending (not code)
 
-- **STT accuracy lever** — Transcribe custom vocabulary, then benchmark Deepgram
-  Nova-3 as a second STT (same A/B method as the LLMs). `OPTIMIZATION.md`.
+- **STT accuracy lever** — ✅ Transcribe custom vocabulary wired + measured
+  (see Real numbers). Next: benchmark Deepgram Nova-3 as a second STT (same A/B
+  method as the LLMs). `OPTIMIZATION.md`.
 - **3rd model in the A/B** — add gpt-4o-mini so "swap the model, same misses"
   holds across 3 vendors.
 - **Extension MV3 shell** — one manual load-unpacked pass (the WS+fill logic is

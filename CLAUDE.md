@@ -104,8 +104,11 @@ end-to-end (2026-09-01). `pricing.py` `LLM_RATES` has per-backend rates.
 - **Speech→screen latency** — `extracted_fields` has `stt_lag_ms` / `debounce_ms`
   / `e2e_ms` per pass (`transcribe_stream` measures STT lag against a frame-arrival
   mark table; `extract._latency_stages` does the rest). Shown on `/session/<id>`.
-- **Next:** STT custom vocabulary (needs `transcribe:CreateVocabulary` on the IAM
-  policy) — the fix for the accuracy bottleneck the A/B identified.
+- **STT custom vocabulary** — ✅ 2026-09-07. `eval/build_vocab.py` + `TRANSCRIBE_VOCAB`
+  env (`transcribe_stream.py`, `agent.py`, `eval/run.py --vocab`). Fixes seeded
+  surnames at the source; downstream accuracy within noise. Deep phonetic misses
+  need `SoundsLike` (S3 table) or a 2nd STT.
+- **Next:** benchmark Deepgram Nova-3 as a 2nd STT (needs a Deepgram key).
 
 ## Deploy
 

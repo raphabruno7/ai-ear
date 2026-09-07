@@ -47,7 +47,12 @@ async def main() -> None:
     ap.add_argument("--models", nargs="+", default=list(EXTRACTORS), choices=list(EXTRACTORS))
     ap.add_argument("--limit", type=int)
     ap.add_argument("--sleep", type=float, default=0, help="seconds between samples (free-tier pacing)")
+    ap.add_argument("--vocab", default=os.environ.get("TRANSCRIBE_VOCAB"),
+                    help="Transcribe custom vocabulary name (default: $TRANSCRIBE_VOCAB)")
+    ap.add_argument("--no-vocab", action="store_true", help="force vocabulary off (before-run)")
     args = ap.parse_args()
+    vocab = None if args.no_vocab else (args.vocab or None)
+    print(f"custom vocabulary: {vocab or 'none'}")
 
     rows = [json.loads(l) for l in SAMPLES.read_text().splitlines() if l.strip()]
     if args.limit:
@@ -64,7 +69,7 @@ async def main() -> None:
             print(f"skip {s['id']} (no audio — run make_dataset.py)")
             continue
         try:
-            transcript = await transcribe_file(str(wav), REGION)
+            transcript = await transcribe_file(str(wav), REGION, vocab=vocab)
         except Exception as e:  # noqa: BLE001 — network blip, skip this sample
             print(f"  {s['id']:>4} transcribe ERROR {e!r}"[:160])
             continue
@@ -94,7 +99,7 @@ async def main() -> None:
             await asyncio.sleep(args.sleep)
 
     trace_flush()
-    _report(run_id, args.models, results, transcripts)  # always, from memory
+    _report(run_id, args.models, results, transcripts, vocab)  # always, from memory
 
     # Supabase is best-effort — a network blip must not lose the run.
     if sb and results:
@@ -106,8 +111,8 @@ async def main() -> None:
 
 
 def _report(run_id: str, models: list[str], results: list[dict],
-            transcripts: dict[str, str] | None = None) -> None:
-    lines = [f"# Eval run {run_id}", ""]
+            transcripts: dict[str, str] | None = None, vocab: str | None = None) -> None:
+    lines = [f"# Eval run {run_id}", "", f"custom vocabulary: {vocab or 'none'}", ""]
     lines.append("| model | kind | n | exact | phonetic | mean WER | mean lev |")
     lines.append("|---|---|--:|--:|--:|--:|--:|")
     for model in models:
