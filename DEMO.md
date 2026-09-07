@@ -1,8 +1,9 @@
 # DEMO — como apresentar o call-copilot
 
-Runbook de 5–8 min para uma demo (vídeo, chamada, apresentação). Tudo aqui corre
-**sem uma chamada LiveKit ao vivo** (essa parte está bloqueada em Wi-Fi/CGNAT —
-ver `HANDOFF.md`). O pipeline mostra-se por peças.
+Runbook de 5–8 min para uma demo (vídeo, chamada, apresentação). O pipeline
+completo já corre e2e (`agent.py` + `sim_call.py` — precisa de Wi-Fi estável, o
+hotspot celular quebra o WebRTC). Este guião mostra-o por peças a partir do
+dashboard + eval, que não precisam de rede.
 
 ## Antes de começar (5 min)
 
@@ -50,13 +51,13 @@ Claude Haiku (Bedrock) em runtime, atrás da mesma interface. Tool use forçado 
 Bedrock, JSON no Gemini, merge só sobrescreve com confiança maior, `finalize()`
 faz uma passagem final sobre o transcript inteiro.
 
-Abre `/eval`. **Money talking point:**
-*"A/B nas 25 amostras difíceis. Gemini 47%/67% exact/fonético nos nomes, Haiku
-40%/60%. Mas o essencial: **os dois modelos falham exatamente as mesmas
-amostras** — 'Seán Mac Cárthaigh' → 'Sean McCarvey' nos dois. O input é o mesmo
-transcript. **Isolei o gargalo: é o STT (en-US) a estropiar fonemas
-não-ingleses, não o LLM.** A alavanca de accuracy é custom vocabulary no
-Transcribe ou um STT mais robusto a sotaques — não trocar de modelo."*
+Abre `/eval` e `eval/report.md` (secção "STT is the bottleneck"). **Money talking
+point:** *"A/B nas 25 amostras difíceis. Fonético ~60% nos dois modelos, estável.
+Mas o essencial: **os dois modelos falham exatamente as mesmas amostras** — 'Seán
+Mac Cárthaigh' → 'Sean McCarvey' nos dois — porque o transcript de input é
+idêntico e já vem errado. Isolei o gargalo: é a camada de transcrição, não o LLM.
+A alavanca é custom vocabulary no Transcribe ou um STT mais robusto a sotaques —
+não trocar de modelo."*
 
 ### 4. Latência / custo (1 min)
 Abre `/costs`. `listener/bench_latency.py` mede tempo-até-primeiro-valor.
@@ -72,7 +73,7 @@ rede de segurança."*
 Dashboard do Langfuse. Abre um trace `eval:gemini-flash`.
 
 **Talking point:** *"Cada chamada ao modelo é um trace com input, output, tokens
-e custo. 59 traces do A/B. Instrumento o que construo."*
+e custo, no listener e no eval. Instrumento o que construo."*
 
 ### 6. A entrega — extensão (1 min)
 `/demo-scheduler` com a extensão ligada (badge ●). Os campos preenchem-se a cada
@@ -89,15 +90,21 @@ sintoma → check → fix → rollback.
 
 ---
 
-## Se perguntarem "posso ver uma chamada real?"
+## Se perguntarem "posso ver uma chamada ao vivo?"
 
-Honestidade: *"O e2e com uma chamada LiveKit ao vivo está bloqueado por
-conectividade — o WebRTC media falha atrás de CGNAT numa rede móvel. O
-`test_transcribe_wiring.py` corre esse caminho com o fixture (49s, 2 speakers,
-14 finais). O resto do pipeline — extração, persistência, Langfuse, extensão —
-está provado peça a peça."*
+Corre (precisa de Wi-Fi estável, não hotspot):
 
-Não inventes uma chamada real que não aconteceu.
+```bash
+cd listener
+.venv/bin/python agent.py --room demoX &        # espera "transcribing track from vcc/family"
+.venv/bin/python sim_call.py --room demoX --track both
+```
+
+→ abre `/session/<id>` — os 7 campos populam-se; `/costs` mostra a linha de custo
+real dessa chamada.
+
+Honestidade: são 2 vozes sintéticas (macOS `say`), não uma chamada de telefone
+real. O caminho de código é o mesmo; em produção entraria por SIP.
 
 ## As 3 frases que ficam
 

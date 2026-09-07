@@ -52,18 +52,17 @@ WebSocket **on the listener process**, not through the web app.
 
 ## Status
 
-Extraction runs end-to-end on **Vertex AI**; the `_emit → merge → _persist →
-extracted_fields` path is verified. Bedrock is wired and benchmarked but in
-"sleep mode" (default is Gemini). **The one gap is the full listener e2e with a
-live LiveKit call** — blocked on a stable Wi-Fi (WebRTC media fails on
-cellular/CGNAT), not on code.
+**The pipeline is proven end to end** (2026-09-07): two live runs of LiveKit →
+Transcribe → Gemini (Vertex AI) → Supabase, 7/7 fields extracted, real `call_costs`
+row ($0.050 for a 113s call), clean teardown. Bedrock Haiku 4.5 is wired and
+benchmarked but in "sleep mode" — `EXTRACT_BACKEND` toggles at runtime.
 
 | Phase | State |
 |---|---|
 | 0 scaffold + migrations 001–005 | ✅ |
-| 1 listener + Transcribe (reconnect-resilient) | ✅ verified e2e (49s / 2 speakers / 14 finals) |
-| 2 incremental extraction (Vertex + Bedrock backends) | ✅ code + persist path verified; live LiveKit e2e pending Wi-Fi |
-| 3 Langfuse tracing | ✅ v4, 59 traces (smoke + full A/B) |
+| 1 listener + Transcribe (reconnect-resilient) | ✅ verified e2e |
+| 2 incremental extraction (Vertex + Bedrock backends) | ✅ **live e2e verified** — 7/7 fields into `extracted_fields` + real `call_costs` |
+| 3 Langfuse tracing | ✅ v4 — listener `extract_turn` + eval traces, token + cost |
 | 4 SES briefing | ✅ real email sent + received |
 | 5 golden-set A/B | ✅ Haiku vs Gemini, 25 samples — see `EVIDENCE.md` |
 | 6 Chrome extension + WS fan-out | ✅ WS+fill verified (`extension/VERIFY.md`); MV3 shell needs one manual load-unpacked |

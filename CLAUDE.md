@@ -93,16 +93,15 @@ free-tier daily cap. Falls back to the `GEMINI_API_KEY` (AI Studio) path when
 The `_emit_gemini` → `merge` → `_persist` → `extracted_fields` path is verified
 end-to-end (2026-09-01). `pricing.py` `LLM_RATES` has per-backend rates.
 
-## Blocked (not code)
+## State (nothing is blocked — see `HANDOFF.md` for the full picture)
 
-- **Bedrock** — `ThrottlingException: Too many tokens per day` since account
-  creation. New-account daily cap; AWS Support case ("Account and billing",
-  free). **Sleep mode** — `_emit_bedrock` etc. untouched; set
-  `EXTRACT_BACKEND=bedrock` when it clears, for the Haiku-vs-Gemini A/B.
-- **LiveKit media e2e** — the listener e2e needs a stable Wi-Fi (not an iPhone
-  hotspot — CGNAT breaks WebRTC UDP). Code path is ready.
-- **Migration `005`** — ✅ run 2026-09-02.
-- **Langfuse** — ✅ keys in `.env`, 59 traces landed.
+- **Live e2e** — ✅ verified 2026-09-07 (needs real Wi-Fi, not an iPhone hotspot —
+  CGNAT breaks WebRTC UDP; signalling connects, media doesn't).
+- **Bedrock** — throttle cleared ~2026-09-02; **sleep mode** (default is Gemini).
+  Set `EXTRACT_BACKEND=bedrock` for the Haiku-vs-Gemini A/B.
+- **Migration `005`** — ✅ run 2026-09-02. **Langfuse** — ✅ listener + eval trace (v4).
+- **Next:** STT custom vocabulary (needs `transcribe:CreateVocabulary` on the IAM
+  policy) — the fix for the accuracy bottleneck the A/B identified.
 
 ## Deploy
 
