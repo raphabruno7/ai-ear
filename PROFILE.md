@@ -37,8 +37,8 @@ correr. Base para CV, LinkedIn e posicionamento de portefólio.
 - **A/B completo Haiku 4.5 vs Gemini 3.6 Flash** — 25 amostras: nomes
   Gemini 47%/67% exact/fonético vs Haiku 40%/60%; emails empatados a 30%. **Os
   dois modelos falham as mesmas amostras** → confirma que o gargalo é o STT.
-- **Langfuse ao vivo** — SDK v4, 59 traces (smoke + A/B completo), com token +
-  custo por observação (`$` populado).
+- **Langfuse ao vivo** — SDK v4; traces do eval (com token + custo por
+  observação) e, desde 2026-09-07, do listener (`extract_turn`).
 - **Extensão Chrome** — caminho WS → contrato → fill verificado contra a página
   real (`/demo-scheduler`): 7/7 campos incl. textarea, valores sobrevivem a
   re-render. Falta 1 "load unpacked" manual do shell MV3.
@@ -48,9 +48,14 @@ correr. Base para CV, LinkedIn e posicionamento de portefólio.
   (`preferred_time` só no fim), não o extrator.
 - **RLS** — migração 005 aplicada (políticas SELECT por `vcc_id`).
 
+### Verificado (2026-09-07)
+- **Listener e2e completo** — 2 corridas ao vivo: LiveKit → 2 speakers →
+  Transcribe → Gemini → 7/7 campos em `extracted_fields` + `call_costs` real
+  ($0.050 numa chamada de 113s). Teardown limpo.
+- **Bug corrigido:** `trace.py` lia `_ENABLED` antes do `load_dotenv` do agent
+  → o listener nunca tracejava para o Langfuse (o eval sim). Corrigido.
+
 ### Não feito
-- **Listener e2e com uma chamada LiveKit real** — bloqueado em Wi-Fi estável
-  (WebRTC media falha em rede móvel/CGNAT), não em código.
 - Deploy em produção (Railway/Vercel).
 - STT custom vocabulary (a alavanca de accuracy) — precisa de `transcribe:CreateVocabulary`
   na política IAM.

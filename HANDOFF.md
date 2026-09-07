@@ -7,21 +7,28 @@ Complete context to continue this project in a fresh Claude Code session opened
 
 ## 0.0 PENDING — start here next cycle (as of 2026-09-07)
 
-**Done since 2026-09-02:** #5 prompt-audit F1–F3 (PR #7) — F2's example name wasn't
-actually inflating `n01`; also added a `_clean` guard so a Gemini ramble scores as
-a clean miss instead of polluting `report.md`. Phonetic ~60% both models (stable);
-exact-match wobbles ±1–2 on 15 samples.
+**Done since 2026-09-02:**
+- #5 prompt-audit F1–F3 (PR #7) + a `_clean` ramble guard. Phonetic ~60% both
+  models (stable); exact-match wobbles ±1–2 on 15 samples.
+- **#1 Listener e2e — DONE 2026-09-07.** Two live runs (`e2e-1` = `c3b4e90d…`,
+  `e2e-2` = `e046010f…`): LiveKit → 2 speakers → Transcribe → Gemini → 7/7 fields
+  in `extracted_fields`, real `call_costs` row ($0.050 for a 113s call). Ran on
+  the hotspot despite the CGNAT history — got lucky / better link.
+- **#2 briefing** — verified via `--dry-run` on the real session (pulls all 7
+  fields into the email body). Not sent (SES = real email; run without
+  `--dry-run` to send).
+- **Bug fixed** — `trace.py` evaluated `_ENABLED` at import, before `agent.py`
+  called `load_dotenv` → the **listener never traced to Langfuse** (eval did).
+  `trace.py` now loads `../.env` itself. Verified: `extract_turn` GENERATIONs
+  now land.
 
 Remaining:
 
-Nothing left is an engineering blocker. Each item is connectivity, a credential,
-or a small chore. Priority order:
+Nothing left is an engineering blocker. Each item is a credential or a chore.
 
 | # | Item | Blocked on | Effort |
 |---|---|---|---|
-| 1 | **Listener e2e with a live LiveKit call** → real `extracted_fields` + LLM `call_costs` row → `/session/<id>`, `/costs`, fill `EVIDENCE.md` | **Stable Wi-Fi** (WebRTC media fails on cellular/CGNAT — see §0). Code path is robust. | 20 min on Wi-Fi |
-| 2 | `briefing.py --session <id>` for that real session | item 1 | 2 min |
-| 3 | **Langfuse screenshot** — open one `eval:gemini-flash` trace, screenshot for `EVIDENCE.md` | nothing (traces are live) | 2 min |
+| 3 | **Langfuse screenshot** — open an `extract_turn` or `eval:gemini-flash` trace, screenshot for `EVIDENCE.md` | nothing (traces are live) | 2 min |
 | 4 | **STT custom vocabulary** (the accuracy lever) — create a vocab of hard owner/pet names, wire `VocabularyName` into `transcribe_stream.py` + `eval/models.py`, re-run eval, show the delta | add `transcribe:CreateVocabulary` / `GetVocabulary` / `ListVocabularies` / `DeleteVocabulary` to the `call-copilot-policy` IAM policy (AWS console) | ~1 h after IAM |
 | 5 | **3rd model in the A/B** — add an `openai` backend to `eval/models.py` (gpt-4o-mini) so the "swap the model, same misses" point holds across 3 vendors, not 2. | `OPENAI_API_KEY` | 30 min |
 | 4b | **Benchmark a 2nd STT** — same A/B method as the LLMs, but for transcription: Deepgram Nova-3 / Speechmatics / gpt-4o-transcribe vs AWS Transcribe on the golden set. This is the *real* accuracy lever (see `OPTIMIZATION.md`). | a Deepgram key (free tier) | ~2 h |
@@ -38,6 +45,15 @@ token+cost), #3 (DEMO.md + PROFILE.md refresh).
 ---
 
 ## 0. Session log
+
+### 2026-09-07
+- **Listener e2e finally runs.** See §0.0. First successful full-pipeline run in
+  the project's history; the teardown fix, idle watchdog, Vertex swap and
+  token/cost work all paid off. 7/7 fields, real `call_costs`, clean teardown.
+- **`trace.py` import-order bug** — the listener's Langfuse spans were a silent
+  no-op because `_ENABLED` was read before `agent.py`'s `load_dotenv`. Fixed
+  (trace.py loads `../.env`). The "59 traces" before this were all eval + smoke.
+- Prompt-audit F1–F3 + `_clean` guard merged (PR #7).
 
 ### 2026-09-03
 - **Reframe** — the project is no longer positioned around a specific job/company.

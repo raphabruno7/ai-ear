@@ -11,6 +11,15 @@ from __future__ import annotations
 import contextlib
 import os
 
+# Load the repo .env before checking for keys — callers that import trace
+# (transitively, via extract) before their own load_dotenv would otherwise get a
+# silent no-op. load_dotenv does not override already-set vars, so this is safe.
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+except Exception:  # noqa: BLE001
+    pass
+
 _ENABLED = bool(os.environ.get("LANGFUSE_PUBLIC_KEY"))
 _client = None
 
