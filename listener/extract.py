@@ -44,7 +44,11 @@ _SYSTEM = (
 _TOOL = {
     "toolSpec": {
         "name": "emit_fields",
-        "description": "Report the currently-known appointment/clinical fields.",
+        "description": (
+            "Report every appointment/clinical field the transcript currently "
+            "supports. Called once per extraction pass over the running transcript; "
+            "re-report each field every pass with your best current value."
+        ),
         "inputSchema": {"json": {
             "type": "object",
             "properties": {
@@ -54,8 +58,10 @@ _TOOL = {
                         "type": "object",
                         "properties": {
                             "name": {"type": "string", "enum": FIELD_NAMES},
-                            "value": {"type": "string"},
-                            "confidence": {"type": "number"},
+                            "value": {"type": "string", "description":
+                                      "Formatted per the system prompt — real spelling, valid email, digits-only phone."},
+                            "confidence": {"type": "number", "description":
+                                           "0..1: how directly the transcript supports this value."},
                         },
                         "required": ["name", "value", "confidence"],
                     },
@@ -194,8 +200,8 @@ class Extractor:
 
         prompt = (
             _SYSTEM + "\n\nTranscript:\n" + convo + "\n\n"
-            "Respond with ONLY a JSON array of objects {name, value, confidence} "
-            f"where name is one of {FIELD_NAMES}. Omit fields not supported by the transcript."
+            f"Return a JSON array of {{name, value, confidence}} objects — "
+            f"name one of {FIELD_NAMES}; omit fields the transcript does not support."
         )
         resp = await asyncio.to_thread(
             self._genai_client().models.generate_content,
