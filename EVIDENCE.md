@@ -76,17 +76,20 @@ AWS SES ──► pre-visit briefing email (per session)
   no failures, wall 14–19 s each, cross-session data-isolation assert passes.
 - **Eval — full A/B, Haiku 4.5 vs Gemini 3.6 Flash, 25 hard samples:**
 
-  | model (fast tier — not frontier) | names exact | names phonetic | emails exact |
+  | model (fast tier — not frontier) | names phonetic | names exact | emails exact |
   |---|--:|--:|--:|
-  | Gemini 3.6 Flash (Vertex AI) | ~40–47% | ~60–67% | 30% |
-  | Claude Haiku 4.5 (Bedrock)   | 40% | 60% | 30% |
+  | Gemini 3.6 Flash (Vertex AI) | ~60% | 33–47% | 30% |
+  | Claude Haiku 4.5 (Bedrock)   | ~60% | 33–40% | 30% |
 
-  **The two models — different vendor, different architecture — miss the same
-  samples.** "Seán Mac Cárthaigh" → "Sean McCarvey" on both, because the input
-  transcript is identical and already wrong. `eval/report.md` → "STT is the
-  bottleneck" prints the proof: `expected | what Transcribe heard | each model's
-  output`. The model columns just echo a broken transcript. Recovering the
-  original would be hallucination, not reasoning. **The accuracy lever is the
+  Phonetic accuracy sits at ~60% for both, stable across runs; exact-match
+  wobbles ±1–2 samples (this is 15 items, and neither model is fully
+  deterministic). **The invariant is *which* samples fail — and they are the same
+  for both models, every run.** "Seán Mac Cárthaigh" → "Sean McCarvey" on both,
+  because the input transcript is identical and already wrong. `eval/report.md` →
+  "STT is the bottleneck" prints the proof: `expected | what Transcribe heard |
+  each model's output`. The model columns just echo a broken transcript.
+  Recovering the original would be hallucination, not reasoning. **The accuracy
+  lever is the
   transcription layer** — `OPTIMIZATION.md` has the vendor comparison + ranked plan.
 - **Extraction runs on Vertex AI** (`GCP_PROJECT` set → Vertex, else AI Studio
   key). Bedrock left wired for the A/B — `EXTRACT_BACKEND` toggles at runtime.

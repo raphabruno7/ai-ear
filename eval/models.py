@@ -18,7 +18,7 @@ _PROMPT = (
     "You are extracting one field from a phone-call transcript. The caller is "
     "spelling or dictating their {kind}. Return ONLY the {kind} itself, correctly "
     "formatted:\n"
-    '- name: proper capitalisation, real spelling (e.g. "Kathleen O\'Brien")\n'
+    '- name: proper capitalisation, real spelling (e.g. "Nadia Osei-Bonsu")\n'
     '- email: a valid address, expanding "at"/"dot"/"underscore"/"hyphen"/digits '
     '(e.g. "jane.doe@gmail.com")\n\n'
     "Transcript:\n{transcript}\n"
@@ -136,7 +136,11 @@ def _clean(s: str) -> str:
     for pre in ("the name is", "the email is", "name:", "email:", "answer:"):
         if s.lower().startswith(pre):
             s = s[len(pre):].strip()
-    return s.splitlines()[0].strip() if s else s
+    s = s.splitlines()[0].strip() if s else s
+    # A name or email is short. Anything long is the model narrating instead of
+    # answering (Gemini 3.x does this on the hardest spelled-out samples) — score
+    # it as a clean miss, don't dump a paragraph into the report table.
+    return "" if len(s) > 60 else s
 
 
 EXTRACTORS = {"bedrock-haiku": extract_bedrock, "gemini-flash": extract_gemini}
