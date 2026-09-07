@@ -108,7 +108,9 @@ end-to-end (2026-09-01). `pricing.py` `LLM_RATES` has per-backend rates.
   env (`transcribe_stream.py`, `agent.py`, `eval/run.py --vocab`). Fixes seeded
   surnames at the source; downstream accuracy within noise. Deep phonetic misses
   need `SoundsLike` (S3 table) or a 2nd STT.
-- **Next:** benchmark Deepgram Nova-3 as a 2nd STT (needs a Deepgram key).
+- **Deepgram Nova-3 A/B** — code wired (`eval/run.py --stt deepgram`,
+  `transcribe_deepgram` in `eval/models.py`, Nova-3 keyterms = seeded names).
+  **Next:** add `DEEPGRAM_API_KEY` (free tier), run it, record the delta.
 
 ## Deploy
 

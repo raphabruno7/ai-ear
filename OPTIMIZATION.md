@@ -65,11 +65,17 @@ The answer, on hard non-English names: no.
 | **Whisper** (`whisper-1`) | ❌ batch | good accuracy | too slow for a live call; deployable on SageMaker if latency budget allows |
 
 **Ranked plan:**
-1. **AWS Transcribe custom vocabulary** — stays fully in AWS, costs nothing;
-   feed common owner/pet surnames + the golden-set hard terms; re-run the eval,
-   show the delta. (Needs `transcribe:CreateVocabulary` on the IAM policy.)
-2. **Benchmark Deepgram Nova-3** as a 2nd STT in `eval/models.py` — same A/B
-   method as the LLMs. "Swappable, benchmarked STT backend" mirrors the LLM story.
+1. ✅ **AWS Transcribe custom vocabulary** (done 2026-09-07) — `eval/build_vocab.py`,
+   Phrases list from the golden-set surnames, `TRANSCRIBE_VOCAB` env. Fixes
+   seeded surnames in the transcript ("Wozkowski"→"Wojciechowski"); downstream
+   field accuracy within noise (`EVIDENCE.md`). `SoundsLike`/IPA would reach the
+   acoustic misses but needs the S3 table format (extra IAM + a bucket).
+2. **Benchmark Deepgram Nova-3** — A/B code done (`eval/run.py --stt deepgram`;
+   `transcribe_deepgram` prerecorded API; Nova-3 keyterms carry the seeded names
+   when `--vocab` is on). Nova-3 pay-as-you-go looks materially cheaper than
+   Transcribe's $0.024/min — confirm the exact rate at deepgram.com/pricing when
+   the key lands, then a win on accuracy is also a win on cost. Awaits
+   `DEEPGRAM_API_KEY`.
 3. Custom language model on Transcribe, or Speechmatics, if 1–2 fall short.
 
 ## Next (cost / latency)

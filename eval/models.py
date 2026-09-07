@@ -1,6 +1,7 @@
 """Transcription + per-model field extraction for the eval harness.
 
 - transcribe_file: AWS Transcribe streaming, fed from a local 16 kHz wav
+- transcribe_deepgram: Deepgram Nova-3 prerecorded API (2nd-STT A/B)
 - extract_bedrock: Claude Haiku via Bedrock converse, forced emit_field tool
 - extract_gemini: Gemini 2.5 Flash via google-genai, JSON response
 
@@ -56,6 +57,41 @@ async def transcribe_file(path: str, region: str, language: str = "en-US",
 
     await asyncio.gather(pump(), H(stream.output_stream).handle_events())
     return " ".join(parts).strip()
+
+
+DEEPGRAM_URL = "https://api.deepgram.com/v1/listen"
+
+
+async def transcribe_deepgram(path: str, model: str = "nova-3",
+                              keyterms: list[str] | None = None) -> str:
+    """Deepgram prerecorded transcription — the 2nd STT in the A/B.
+
+    Nova-3 keyterm prompting is the Deepgram analogue of the AWS custom
+    vocabulary: pass the same seeded names via `keyterms`.
+    """
+    import httpx
+
+    key = os.environ.get("DEEPGRAM_API_KEY")
+    if not key:
+        raise RuntimeError("DEEPGRAM_API_KEY not set (free tier at deepgram.com)")
+
+    params = [("model", model), ("smart_format", "true"), ("punctuate", "true")]
+    for kt in keyterms or []:                       # nova-3 only, English only
+        params.append(("keyterm", kt))
+    with open(path, "rb") as f:
+        audio = f.read()
+
+    async with httpx.AsyncClient(timeout=60) as c:
+        r = await c.post(DEEPGRAM_URL, params=params, content=audio,
+                         headers={"Authorization": f"Token {key}",
+                                  "Content-Type": "audio/wav"})
+        r.raise_for_status()
+        return _deepgram_transcript(r.json())
+
+
+def _deepgram_transcript(payload: dict) -> str:
+    return (payload["results"]["channels"][0]["alternatives"][0]
+            .get("transcript", "").strip())
 
 
 # token usage of the most recent extract call, for Langfuse span enrichment.
@@ -146,3 +182,19 @@ def _clean(s: str) -> str:
 
 
 EXTRACTORS = {"bedrock-haiku": extract_bedrock, "gemini-flash": extract_gemini}
+
+
+if __name__ == "__main__":  # offline self-checks (no network / creds)
+    assert _clean("The name is Jane Doe") == "Jane Doe"
+    assert _clean("x" * 80) == ""
+    _dg = {"results": {"channels": [{"alternatives": [{"transcript": "  hello world "}]}]}}
+    assert _deepgram_transcript(_dg) == "hello world"
+    assert _deepgram_transcript({"results": {"channels": [{"alternatives": [{}]}]}}) == ""
+    if not os.environ.get("DEEPGRAM_API_KEY"):
+        import asyncio as _a
+        try:
+            _a.run(transcribe_deepgram("/dev/null"))
+            raise SystemExit("expected RuntimeError without DEEPGRAM_API_KEY")
+        except RuntimeError:
+            pass
+    print("models demo ok")

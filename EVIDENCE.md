@@ -156,8 +156,9 @@ AWS SES ──► pre-visit briefing email (per session)
 ## Pending (not code)
 
 - **STT accuracy lever** — ✅ Transcribe custom vocabulary wired + measured
-  (see Real numbers). Next: benchmark Deepgram Nova-3 as a second STT (same A/B
-  method as the LLMs). `OPTIMIZATION.md`.
+  (see Real numbers). Deepgram Nova-3 as a 2nd STT: A/B code done
+  (`eval/run.py --stt deepgram`, Nova-3 keyterms mirror the seeded names) —
+  awaits `DEEPGRAM_API_KEY`. `OPTIMIZATION.md`.
 - **3rd model in the A/B** — add gpt-4o-mini so "swap the model, same misses"
   holds across 3 vendors.
 - **Extension MV3 shell** — one manual load-unpacked pass (the WS+fill logic is
