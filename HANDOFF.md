@@ -1,7 +1,14 @@
 # call-copilot — handoff
 
-Resume the project in a fresh Claude Code session opened **inside `~/call-copilot`**.
-State as of **2026-09-07**.
+> **STATUS** — 2026-09-07
+> · repo: `github.com/raphabruno7/ai-ear` (private) · branch `main` · 0 open PRs
+> · pipeline: **e2e verified end to end** (LiveKit → Transcribe → LLM → Supabase)
+> · self-checks: passing · dashboard: renders · Langfuse: live
+> · **next:** STT custom vocabulary (needs an IAM change) — see START HERE
+> · blockers: none (all remaining work is a credential or a chore)
+
+Resume in a fresh Claude Code session opened **inside `~/call-copilot`**.
+This file: `~/call-copilot/HANDOFF.md`.
 
 ---
 
