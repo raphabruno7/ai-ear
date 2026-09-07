@@ -69,9 +69,10 @@ AWS SES ──► pre-visit briefing email (per session)
   on one field type" is *transcript position* — `preferred_time` is only agreed
   near call-end; `finalize()` is the backstop. The bench also surfaced
   `visit_type` never being extracted → fixed with a prompt allowed-value list.
-- **Per-call cost model:** ≈ $0.26 for an 8-min call — $0.19 Transcribe +
-  $0.07 Bedrock Haiku (`pricing.py`, self-checked; real `call_costs` rows for
-  the STT leg).
+- **Per-call cost — real, both legs** (first live e2e, 2026-09-07): a ~113s call
+  → `call_costs` row `$0.050` total = `$0.045` Transcribe + `$0.0047` Gemini
+  (1829 in / 894 out tokens). Scales to ≈ $0.20–0.26 for an 8-min call — STT is
+  ~90% of it. `pricing.py` + `/costs` dashboard.
 - **Concurrency:** 6 LiveKit rooms opened in parallel — all connect + publish,
   no failures, wall 14–19 s each, cross-session data-isolation assert passes.
 - **Eval — full A/B, Haiku 4.5 vs Gemini 3.6 Flash, 25 hard samples:**
@@ -91,9 +92,13 @@ AWS SES ──► pre-visit briefing email (per session)
   Recovering the original would be hallucination, not reasoning. **The accuracy
   lever is the
   transcription layer** — `OPTIMIZATION.md` has the vendor comparison + ranked plan.
-- **Extraction runs on Vertex AI** (`GCP_PROJECT` set → Vertex, else AI Studio
-  key). Bedrock left wired for the A/B — `EXTRACT_BACKEND` toggles at runtime.
-  The `_emit → merge → _persist → extracted_fields` path is verified end-to-end.
+- **Full live e2e — verified 2026-09-07.** LiveKit room → 2 simulated speakers →
+  per-speaker AWS Transcribe → Gemini extraction (Vertex AI) → `extracted_fields`
+  + `call_costs` in Supabase → `/session/<id>` + `/costs`. Two consecutive runs:
+  14 turns each, **7/7 fields** (`owner_name` "Kathleen O'Brien", phone, email,
+  `pet_name` "Luna", `visit_type` "sick" inferred, `preferred_time`,
+  `clinical_notes`), per-field latency 4–5s, clean teardown. `EXTRACT_BACKEND`
+  toggles Vertex ⇄ Bedrock at runtime.
 
 ## Demo-ready now
 
@@ -106,9 +111,6 @@ AWS SES ──► pre-visit briefing email (per session)
 
 ## Pending (not code)
 
-- **Listener e2e with real fields into the dashboard** — needs a stable Wi-Fi;
-  LiveKit media (WebRTC UDP) fails on cellular/CGNAT. Extraction + persist path
-  already verified without LiveKit.
 - **STT accuracy lever** — Transcribe custom vocabulary, then benchmark Deepgram
   Nova-3 as a second STT (same A/B method as the LLMs). `OPTIMIZATION.md`.
 - **3rd model in the A/B** — add gpt-4o-mini so "swap the model, same misses"
@@ -118,6 +120,6 @@ AWS SES ──► pre-visit briefing email (per session)
 
 ## What this is not
 
-A deployed product with real users. It's a hands-on model of the problem, verified
-in fixtures + programmatic tests. The live LiveKit call e2e is the one piece not
-yet run end to end (blocked on a stable network, not code).
+A deployed product with real users. It's a hands-on model of the problem —
+verified end to end against a simulated call, not tested on live production
+traffic.
