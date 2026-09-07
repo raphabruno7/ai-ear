@@ -5,7 +5,14 @@ Complete context to continue this project in a fresh Claude Code session opened
 
 ---
 
-## 0.0 PENDING — start here next cycle (as of 2026-09-02)
+## 0.0 PENDING — start here next cycle (as of 2026-09-07)
+
+**Done since 2026-09-02:** #5 prompt-audit F1–F3 (PR #7) — F2's example name wasn't
+actually inflating `n01`; also added a `_clean` guard so a Gemini ramble scores as
+a clean miss instead of polluting `report.md`. Phonetic ~60% both models (stable);
+exact-match wobbles ±1–2 on 15 samples.
+
+Remaining:
 
 Nothing left is an engineering blocker. Each item is connectivity, a credential,
 or a small chore. Priority order:
@@ -16,8 +23,7 @@ or a small chore. Priority order:
 | 2 | `briefing.py --session <id>` for that real session | item 1 | 2 min |
 | 3 | **Langfuse screenshot** — open one `eval:gemini-flash` trace, screenshot for `EVIDENCE.md` | nothing (traces are live) | 2 min |
 | 4 | **STT custom vocabulary** (the accuracy lever) — create a vocab of hard owner/pet names, wire `VocabularyName` into `transcribe_stream.py` + `eval/models.py`, re-run eval, show the delta | add `transcribe:CreateVocabulary` / `GetVocabulary` / `ListVocabularies` / `DeleteVocabulary` to the `call-copilot-policy` IAM policy (AWS console) | ~1 h after IAM |
-| 5 | **Prompt-audit fixes** F1–F3 (see the audit output, 2026-09-02) — F2 matters: `eval/models.py:21` example `"Kathleen O'Brien"` is the gold answer for sample `n01`. Fix + re-run the A/B. | nothing | 15 min |
-| 6 | **3rd model in the A/B** — add an `openai` backend to `eval/models.py` (gpt-4o-mini) so the "swap the model, same misses" point holds across 3 vendors, not 2. | `OPENAI_API_KEY` | 30 min |
+| 5 | **3rd model in the A/B** — add an `openai` backend to `eval/models.py` (gpt-4o-mini) so the "swap the model, same misses" point holds across 3 vendors, not 2. | `OPENAI_API_KEY` | 30 min |
 | 4b | **Benchmark a 2nd STT** — same A/B method as the LLMs, but for transcription: Deepgram Nova-3 / Speechmatics / gpt-4o-transcribe vs AWS Transcribe on the golden set. This is the *real* accuracy lever (see `OPTIMIZATION.md`). | a Deepgram key (free tier) | ~2 h |
 | 7 | **Deploy** — `listener/` → Railway (Dockerfile + railway.toml ready), `web/` → Vercel. Add CI. | Railway + Vercel accounts/tokens | half a day |
 | 8 | **Extension MV3 manual pass** — one `chrome://extensions` → Load unpacked → confirm badge ● + fill (WS+fill logic already verified programmatically, `extension/VERIFY.md`) | nothing | 10 min |
