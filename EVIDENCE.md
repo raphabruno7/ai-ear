@@ -3,7 +3,7 @@
 A real-time voice **copilot that listens** to a live call between a veterinary
 care coordinator (VCC) and a pet family, extracts appointment + clinical fields
 as the call runs, and writes them into the scheduling form via a Chrome
-extension. Companion piece: [`voice-demo`](../voice-demo) — six *talking* voice
+extension. Companion piece: [`voice-agent-stacks`](https://github.com/raphabruno7/voice-agent-stacks) — six *talking* voice
 bots. This one never speaks.
 
 Explores **ambient AI** hands-on: streaming STT, real-time structured extraction,
@@ -42,7 +42,7 @@ AWS SES ──► pre-visit briefing email (per session)
 | Data isolation between users | `vcc_id` on every row + `005_rls_policies.sql` + `test_ws_server.py` cross-session check + loadtest isolation assert |
 | Incident handling, monitoring, rollback | `HEALTH.md`, `/api/health`, `listener/healthcheck.py` |
 | Chrome extension delivery | `extension/` — MV3, WS client, React-safe form fill; WS→contract→fill verified end-to-end against `/demo-scheduler` (7/7 fields incl. textarea, values survive re-render) — `extension/VERIFY.md` |
-| Telephony / streaming stacks | LiveKit (rooms + SIP), AWS Transcribe; Twilio in `voice-demo` |
+| Telephony / streaming stacks | LiveKit (rooms + SIP), AWS Transcribe; Twilio in `voice-agent-stacks` |
 | SES epic end to end | `listener/briefing.py` — verified: real email sent + received |
 | AWS: Bedrock, serverless, SES, token economics | all three wired; `pricing.py` + debounce + `OPTIMIZATION.md` |
 | Empathy-sensitive domain | modelled on veterinary end-of-life care |
