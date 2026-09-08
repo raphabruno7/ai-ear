@@ -6,7 +6,7 @@ appointment + clinical fields as the call runs, and writes them into a schedulin
 form via a **Chrome extension**. Second workstream: a pre-visit briefing email.
 It never speaks.
 
-Companion to [`voice-demo`](https://github.com/raphabruno7/voice-demo) — six
+Companion to [`voice-agent-stacks`](https://github.com/raphabruno7/voice-agent-stacks) — six
 *talking* voice bots. Framing: "bots that talk" vs "a copilot that listens".
 
 A portfolio piece exploring **ambient AI** — the category of clinical software
