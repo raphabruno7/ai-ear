@@ -93,7 +93,7 @@ free-tier daily cap. Falls back to the `GEMINI_API_KEY` (AI Studio) path when
 The `_emit_gemini` → `merge` → `_persist` → `extracted_fields` path is verified
 end-to-end (2026-09-01). `pricing.py` `LLM_RATES` has per-backend rates.
 
-## State (nothing is blocked — see `HANDOFF.md` for the full picture)
+## State
 
 - **Live e2e** — ✅ verified 2026-09-07 (needs real Wi-Fi, not an iPhone hotspot —
   CGNAT breaks WebRTC UDP; signalling connects, media doesn't).
@@ -105,14 +105,14 @@ end-to-end (2026-09-01). `pricing.py` `LLM_RATES` has per-backend rates.
 
 ## Deploy
 
-- Remote: `origin` → `github.com/raphabruno7/ai-ear` (private). Push `main` →
+- Remote: `origin` → `github.com/raphabruno7/ai-ear`. Push `main` →
   nothing auto-deploys yet (no Railway/Vercel hookup).
 - Intended: `listener/` → Railway (Dockerfile + railway.toml), `web/` → Vercel.
 
 ## Git
 
 ```
-Remote: origin → github.com/raphabruno7/ai-ear (private).
+Remote: origin → github.com/raphabruno7/ai-ear.
 Workflow: branch per task → push → `gh pr create` → user merges to main.
   (one-line fixes may still go straight to main).
 Commit style: feat(listener): … / fix(web): … / docs: …
@@ -126,9 +126,7 @@ Commit style: feat(listener): … / fix(web): … / docs: …
 
 ## Reference
 
-- Full session history & decisions: `HANDOFF.md`
 - Claim → evidence + numbers: `EVIDENCE.md`
 - Incident runbook: `HEALTH.md`
 - Cost/latency plan: `OPTIMIZATION.md`
 - AWS setup: `listener/AWS.md`
-- Original plan: `~/.claude/plans/crie-um-plano-de-witty-pond.md`
