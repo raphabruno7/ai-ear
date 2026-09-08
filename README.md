@@ -1,4 +1,4 @@
-# call-copilot
+# Ambient AI Call Copilot
 
 A real-time **voice copilot that listens** to a live call between two humans (a
 veterinary care coordinator and a pet family), transcribes it, extracts
@@ -6,8 +6,8 @@ appointment + clinical fields as the call runs, and writes them into a schedulin
 form via a **Chrome extension**. Second workstream: a pre-visit briefing email.
 It never speaks.
 
-Companion to [`voice-demo`](../voice-demo) — six *talking* voice bots. Framing:
-"bots that talk" vs "a copilot that listens".
+Companion to [`voice-demo`](https://github.com/raphabruno7/voice-demo) — six
+*talking* voice bots. Framing: "bots that talk" vs "a copilot that listens".
 
 A portfolio piece exploring **ambient AI** — the category of clinical software
 that listens and writes the record instead of talking. Built hands-on to learn
@@ -15,8 +15,6 @@ where the hard problems actually are: streaming STT, real-time structured
 extraction, golden-set accuracy evals, Langfuse tracing, concurrency +
 data-isolation, per-call cost. **`EVIDENCE.md`** is the claim → evidence map with
 the real numbers.
-
-Repo: `github.com/raphabruno7/ai-ear` (private).
 
 ## Pipeline
 
@@ -100,11 +98,9 @@ cd web && npm run build && npm start                   # dashboard on :3000
 |---|---|
 | `EVIDENCE.md` | Requirement → evidence map + the real numbers (the pitch). |
 | `DEMO.md` | How to present it — 5-min walkthrough, talking points, fallbacks. |
-| `HANDOFF.md` | Full session history, what's verified, what's blocked, exact resume commands. |
 | `GLOSSARY.md` | Every technical term used, explained (pt-PT). |
 | `OPTIMIZATION.md` | Cost & latency plan — done vs next, with measurements. |
 | `HEALTH.md` | Incident runbook — each failure mode → symptom → check → fix. |
-| `PROFILE.md` | What this project demonstrates — portfolio positioning + CV bullets. |
 | `CLAUDE.md` | Instructions for Claude Code working in this repo. |
 | `listener/AWS.md` | AWS account setup, IAM policy, model access. |
 | `extension/VERIFY.md` | How the extension was verified + the one-time manual pass. |
