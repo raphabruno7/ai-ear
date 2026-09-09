@@ -75,10 +75,16 @@ The answer, on hard non-English names: no.
    Result: names phonetic ~60% → **67% (Haiku) / 80% (Gemini)**, names exact
    33–53% → **60%**, emails flat (control). **Cost**: Nova-3 streaming
    $0.0048/min vs Transcribe $0.024/min — **~5× cheaper**. Both directions win.
-3. **Port the live listener to Nova-3** — `transcribe_stream.py` currently
+3. ✅ **WebRTC pre-processing** (done 2026-09-09) — `listener/audio_apm.py`,
+   NS + high-pass before STT (`AUDIO_APM` env; same module in the eval `--apm`).
+   Controlled A/B against a noisy cohort (`eval/make_noisy.py`): **noise itself
+   is devastating** (phonetic 67% → 33% at 5 dB SNR), but the APM's own effect is
+   within run-to-run wobble at n=15 — not a reliable lever on this synthetic
+   noise. The robust move is a noise-tolerant STT, not pre-filtering.
+4. **Port the live listener to Nova-3** — `transcribe_stream.py` currently
    streams AWS. Deepgram has a streaming WS API; the eval used prerecorded.
    This is the next real change.
-4. Custom language model on Transcribe, or Speechmatics, if 2–3 fall short.
+5. Custom language model on Transcribe, or Speechmatics, if 2–4 fall short.
 
 ## Next (cost / latency)
 - **Prompt caching** (Bedrock): the system prompt + tool schema are constant —

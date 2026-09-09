@@ -17,6 +17,8 @@ Next.js.
 LiveKit room (VCC + family + 1 silent listener)
    │  one audio track per speaker
    ▼
+WebRTC APM (optional NS / HPF / AGC — AUDIO_APM)
+   ▼
 AWS Transcribe streaming ──► running transcript, per-speaker
    ▼
 extraction (AWS Bedrock Claude Haiku  ⇄  Gemini — EXTRACT_BACKEND toggle)
@@ -32,7 +34,8 @@ AWS SES ──► pre-visit briefing email (per session)
 | Capability | In this repo |
 |---|---|
 | Agent-assist / live transcription copilot | the whole system — `listener/agent.py` |
-| Streaming STT, turn handling, low-latency | `listener/transcribe_stream.py` — AWS Transcribe streaming, per-speaker, reopen-on-silence |
+| Streaming STT, turn handling, low-latency | `listener/transcribe_stream.py` — AWS Transcribe streaming, per-speaker, reopen-on-silence; speech→screen latency broken into STT / debounce / LLM / e2e stages |
+| Audio DSP for telephony | `listener/audio_apm.py` — WebRTC NS / high-pass / AGC before STT (`AUDIO_APM` env), same module in the eval; controlled A/B against a noisy cohort (`eval/make_noisy.py`) — measured, effect within n=15 wobble |
 | LLM field extraction, structured output, guardrails | `listener/extract.py` — forced `emit_fields` tool (Bedrock) / JSON (Gemini), confidence merge |
 | **Model A/B** (Claude Haiku 4.5 vs Gemini 3.6 Flash) | `EXTRACT_BACKEND=bedrock\|gemini` at runtime + `eval/` golden-set harness; real numbers below |
 | Golden-set eval — phonetic name/email accuracy | `eval/` — 25 hard samples, WER / Levenshtein / metaphone, `report.md` + `/eval` dashboard |
@@ -133,6 +136,36 @@ AWS SES ──► pre-visit briefing email (per session)
   — no STT parses "s underscore gallagher at yahoo dot co dot uk" reliably.
   **And it's ~5× cheaper**: Nova-3 $0.0048/min streaming vs Transcribe
   $0.024/min — a win on accuracy *and* cost. `eval/run.py --stt deepgram`.
+- **DSP on the call audio — WebRTC pre-processing (2026-09-09).** The `say`-TTS
+  fixtures are clean, so `eval/make_noisy.py` mixes a pink-noise + mains-hum bed
+  at target SNRs (realised within ±1 dB, reproducible across processes). The
+  LiveKit `AudioProcessingModule` (noise suppression + high-pass) then runs on
+  the audio before STT — the *same* `listener/audio_apm.py` in the live listener
+  (`AUDIO_APM` env) and the eval (`--apm`). AWS Transcribe + vocabulary, Gemini
+  3.6 Flash, names phonetic / mean WER:
+
+  | condition | names phonetic | names WER | emails exact |
+  |---|--:|--:|--:|
+  | clean | 60–67% | 0.30 | 50% |
+  | 10 dB SNR, no APM | 40% | 0.47 | 40% |
+  | 10 dB SNR, + NS/HPF | 40% | 0.43 | 40% |
+  | 5 dB SNR, no APM | 33% | 0.54 | 10% |
+  | 5 dB SNR, + NS/HPF | 40% | 0.62 | 30% |
+
+  **The clear result: noise is devastating** — 5 dB SNR roughly halves phonetic
+  accuracy (67% → 33%) and craters spelled-out emails (50% → 10%). **The APM's
+  own effect is below this eval's noise floor**: at n=15 with non-deterministic
+  LLM formatting, a clean re-run of the same config already wobbles ±1–2 samples
+  (≈ ±7–13 pts), and the APM deltas here are that size and mixed in sign.
+
+  The first grid *did* show +7/+13 pts for the APM — until the noise seeds turned
+  out not to be stable across processes, so off-vs-on had compared different
+  noise beds. With a reproducible cohort (`crc32` seed, verified) the gain
+  disappears. Scope: this is synthetic pink-noise + hum fed offline; WebRTC's
+  suppressor is tuned on real-world noise with real-time framing, so a real
+  babble/office corpus could land differently. On what was tested, a noise-robust
+  STT (Nova-3 above) is the lever, not pre-filtering. Echo cancellation is
+  deliberately off (needs a far-end reference; this listener is passive).
 - **Full live e2e — verified 2026-09-07.** LiveKit room → 2 simulated speakers →
   per-speaker AWS Transcribe → Gemini extraction (Vertex AI) → `extracted_fields`
   + `call_costs` in Supabase → `/session/<id>` + `/costs`. Two consecutive runs:

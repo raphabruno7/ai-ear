@@ -17,6 +17,8 @@ import logging
 import time
 from typing import Awaitable, Callable
 
+import audio_apm
+
 from amazon_transcribe.client import TranscribeStreamingClient
 from amazon_transcribe.handlers import TranscriptResultStreamHandler
 from amazon_transcribe.model import TranscriptEvent
@@ -53,12 +55,13 @@ class _Handler(TranscriptResultStreamHandler):
 
 class TranscribeSession:
     def __init__(self, speaker: str, on_final: OnFinal, region: str, language: str = "en-US",
-                 vocabulary: str | None = None):
+                 vocabulary: str | None = None, apm=None):
         self.speaker = speaker
         self.on_final = on_final
         self.region = region
         self.language = language
         self.vocabulary = vocabulary or None
+        self.apm = apm                  # livekit AudioProcessingModule | None (NS/HPF/AGC)
         self._total_seconds = 0.0
         self._stream = None
         self._handler_task: asyncio.Task | None = None
@@ -94,9 +97,12 @@ class TranscribeSession:
                 self._marks.append((self._stream_audio_s, time.monotonic()))
                 if len(self._marks) > 6000:      # ~60s at 10ms frames — plenty
                     del self._marks[:2000]
+                chunk = bytes(frame.data)
+                if self.apm is not None:         # NS / HPF / AGC before Transcribe
+                    chunk = audio_apm.process_pcm(self.apm, chunk, int(frame.sample_rate))
                 for _ in range(2):
                     try:
-                        await self._stream.input_stream.send_audio_event(audio_chunk=bytes(frame.data))
+                        await self._stream.input_stream.send_audio_event(audio_chunk=chunk)
                         break
                     except Exception as e:  # stream closed (silence timeout) or connection blip
                         if self._stopped:

@@ -21,6 +21,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from dotenv import load_dotenv
 from livekit import rtc
 
+import audio_apm
 from extract import Extractor
 from lktoken import listener_token
 from transcribe_stream import TranscribeSession
@@ -37,6 +38,7 @@ EXTRACT_BACKEND = os.environ.get("EXTRACT_BACKEND", "gemini")  # gemini | bedroc
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL_ID", "gemini-3.6-flash")
 WS_PORT = int(os.environ.get("FIELDS_WS_PORT", 8765))
 TRANSCRIBE_VOCAB = os.environ.get("TRANSCRIBE_VOCAB") or None
+AUDIO_APM = os.environ.get("AUDIO_APM") or ""   # e.g. "ns,hpf,agc"; empty = passthrough
 
 
 def _supabase():
@@ -67,7 +69,7 @@ async def run_listener(room_name: str, vcc_id: str, language: str) -> str:
         supabase=sb,
         ws_broadcast=fields_ws.broadcast,
     )
-    logger.info("extraction backend: %s", EXTRACT_BACKEND)
+    logger.info("extraction backend: %s | audio APM: %s", EXTRACT_BACKEND, AUDIO_APM or "off")
     sessions: dict[str, TranscribeSession] = {}
     done = asyncio.Event()
     room = rtc.Room()
@@ -83,8 +85,11 @@ async def run_listener(room_name: str, vcc_id: str, language: str) -> str:
         if track.kind != rtc.TrackKind.KIND_AUDIO:
             return
         speaker = participant.identity  # "vcc" | "family"
-        stream = rtc.AudioStream(track, sample_rate=16_000, num_channels=1)
-        ts = TranscribeSession(speaker, _on_turn, REGION, language, vocabulary=TRANSCRIBE_VOCAB)
+        apm = audio_apm.build_apm(AUDIO_APM)  # None unless AUDIO_APM is set
+        stream = rtc.AudioStream(track, sample_rate=16_000, num_channels=1,
+                                 frame_size_ms=audio_apm.FRAME_MS if apm else None)
+        ts = TranscribeSession(speaker, _on_turn, REGION, language,
+                               vocabulary=TRANSCRIBE_VOCAB, apm=apm)
         sessions[participant.sid] = ts
         logger.info("transcribing track from %s", speaker)
         asyncio.create_task(ts.run(stream))

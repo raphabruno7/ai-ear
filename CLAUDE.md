@@ -30,6 +30,7 @@ the code is domain-light.
 
 ```
 listener/agent.py   LiveKit room (2 humans + 1 silent listener, no TTS)
+  → audio_apm.py   optional WebRTC pre-processing (NS/HPF/AGC) — AUDIO_APM env
   → transcribe_stream.py   one AWS Transcribe stream per speaker; reopens on
                            silence-close / connection blip
   → extract.py   Extractor — debounced (~12s), backend = bedrock | gemini
@@ -63,7 +64,8 @@ one named room (CLI `--room`), never publishes audio.
   Gemini `gemini-3.6-flash` via Vertex AI (`GCP_LOCATION=global`; `us-central1`
   is 2.5-flash only).
 - **Fixtures** (`listener/fixtures/*.wav`) are committed; `eval/dataset/audio/*.wav`
-  are gitignored — regenerate with `eval/make_dataset.py` (macOS `say` + ffmpeg).
+  and `eval/dataset/audio_noisy/**` are gitignored — regenerate with
+  `eval/make_dataset.py` (macOS `say` + ffmpeg) then `eval/make_noisy.py`.
 
 ## Verify / demo commands
 
@@ -110,7 +112,11 @@ end-to-end (2026-09-01). `pricing.py` `LLM_RATES` has per-backend rates.
   need `SoundsLike` (S3 table) or a 2nd STT.
 - **Deepgram Nova-3 A/B** — ✅ measured 2026-09-09 (`DEEPGRAM_API_KEY` in `.env`).
   Names phonetic ~60% → 67% (Haiku) / 80% (Gemini), ~5× cheaper than Transcribe.
-  **Next:** port the live listener (`transcribe_stream.py`) from AWS to Nova-3.
+- **Audio DSP** — ✅ 2026-09-09. `audio_apm.py` (WebRTC NS/HPF/AGC, `AUDIO_APM` env);
+  `eval/make_noisy.py` cohort + `run.py --noise/--apm`. Finding: noise halves
+  accuracy, but the APM effect is within n=15 wobble — not a reliable lever.
+- **Next:** port the live listener (`transcribe_stream.py`) from AWS to Deepgram
+  Nova-3 streaming.
 
 ## Deploy
 
