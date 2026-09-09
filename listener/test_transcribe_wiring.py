@@ -33,9 +33,14 @@ async def main() -> None:
     finals: list[tuple[str, str]] = []
     errors: list[BaseException] = []
 
-    async def on_final(speaker: str, text: str) -> None:
+    lags: list[int] = []
+
+    async def on_final(speaker: str, text: str,
+                       spoken_end_ts: float | None = None, stt_lag_ms: int | None = None) -> None:
         finals.append((speaker, text))
-        print(f"  [{speaker}] {text}")
+        if stt_lag_ms is not None:
+            lags.append(stt_lag_ms)
+        print(f"  [{speaker}] {text}  (stt_lag {stt_lag_ms}ms)")
 
     async def _run_ts(track, identity: str) -> None:
         try:
@@ -79,7 +84,9 @@ async def main() -> None:
     assert speakers == {"vcc", "family"}, f"speaker labels wrong: {speakers}"
     assert "kathleen" in blob, f"missing 'kathleen': {blob!r}"
     assert "luna" in blob, f"missing 'luna': {blob!r}"
-    print(f"\nOK — {len(finals)} finals, both speakers, key content present")
+    assert lags and all(0 <= x < 30_000 for x in lags), f"stt_lag_ms out of range: {lags}"
+    print(f"\nOK — {len(finals)} finals, both speakers, key content present; "
+          f"stt_lag min/median/max = {min(lags)}/{sorted(lags)[len(lags)//2]}/{max(lags)}ms")
 
 
 if __name__ == "__main__":

@@ -3,7 +3,11 @@
     from trace import span, flush
     with span("extract_turn", input=convo) as s:
         ...
-        s.update(output=fields, usage={"input": in_tok, "output": out_tok})
+        s.update(output=fields, usage_details={"input": in_tok, "output": out_tok})
+
+Only `input` is read at span open; everything else (output, model, metadata,
+usage_details, cost_details, level, status_message) must go through `s.update()`.
+Pass `as_type="span"` for a non-LLM observation (STT leg, call-level wrapper).
 """
 
 from __future__ import annotations
@@ -42,8 +46,10 @@ class _Span:
 
 
 @contextlib.contextmanager
-def span(name: str, **start_kw):
-    """An LLM-call observation. Emits a `generation` so token/cost show in Langfuse."""
+def span(name: str, *, as_type: str = "generation", **start_kw):
+    """A Langfuse observation. `generation` (default) carries token/cost; use
+    `span` for a non-LLM step (STT leg, call-level wrapper). Nesting is implicit —
+    a span opened inside another's `with` block becomes its child."""
     if not _ENABLED or _client is None:
         yield _Span(None)
         return
@@ -51,7 +57,7 @@ def span(name: str, **start_kw):
     obs = getattr(_client, "start_as_current_observation", None)
     try:
         if obs is not None:  # langfuse v4
-            cm = obs(name=name, input=inp, as_type="generation")
+            cm = obs(name=name, input=inp, as_type=as_type)
         else:                # langfuse v3
             gen = getattr(_client, "start_as_current_generation", _client.start_as_current_span)
             cm = gen(name=name, input=inp)

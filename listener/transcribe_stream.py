@@ -12,7 +12,9 @@ and network blips.
 from __future__ import annotations
 
 import asyncio
+import bisect
 import logging
+import time
 from typing import Awaitable, Callable
 
 from amazon_transcribe.client import TranscribeStreamingClient
@@ -21,22 +23,32 @@ from amazon_transcribe.model import TranscriptEvent
 
 logger = logging.getLogger("copilot-listener.stt")
 
-OnFinal = Callable[[str, str], Awaitable[None]]  # (speaker, text)
+# (speaker, text, spoken_end_ts, stt_lag_ms):
+#   spoken_end_ts — time.monotonic() when we *had* the audio the speaker's last
+#     word ended on (i.e. when that frame arrived from LiveKit). None if unknown.
+#   stt_lag_ms — wall ms from there to this stabilised final arriving. This is
+#     Transcribe's processing + network lag, isolated from bursty frame delivery.
+OnFinal = Callable[[str, str, "float | None", "int | None"], Awaitable[None]]
 
 
 class _Handler(TranscriptResultStreamHandler):
-    def __init__(self, output_stream, speaker: str, on_final: OnFinal):
+    def __init__(self, output_stream, speaker: str, on_final: OnFinal, session: "TranscribeSession"):
         super().__init__(output_stream)
         self._speaker = speaker
         self._on_final = on_final
+        self._session = session
 
     async def handle_transcript_event(self, event: TranscriptEvent) -> None:
         for result in event.transcript.results:
             if result.is_partial or not result.alternatives:
                 continue
             text = result.alternatives[0].transcript.strip()
-            if text:
-                await self._on_final(self._speaker, text)
+            if not text:
+                continue
+            spoken_end_ts = self._session._recv_ts_for(result.end_time)
+            stt_lag_ms = (max(0, int((time.monotonic() - spoken_end_ts) * 1000))
+                          if spoken_end_ts is not None else None)
+            await self._on_final(self._speaker, text, spoken_end_ts, stt_lag_ms)
 
 
 class TranscribeSession:
@@ -50,10 +62,21 @@ class TranscribeSession:
         self._handler_task: asyncio.Task | None = None
         self._stopped = False
         self._reopens = 0
+        # (audio_seconds_into_current_stream, monotonic_ts_frame_arrived), bounded.
+        # result.end_time is per-stream, so this resets on every _open().
+        self._marks: list[tuple[float, float]] = []
+        self._stream_audio_s = 0.0
 
     @property
     def audio_seconds(self) -> float:
         return self._total_seconds
+
+    def _recv_ts_for(self, end_time: float | None) -> float | None:
+        """Wall ts at which we received the audio frame covering `end_time`."""
+        if end_time is None or not self._marks:
+            return None
+        i = bisect.bisect_left(self._marks, (end_time,))
+        return self._marks[min(i, len(self._marks) - 1)][1]
 
     async def run(self, audio_stream) -> None:
         """audio_stream: rtc.AudioStream, 16 kHz mono. Returns when the track ends."""
@@ -63,7 +86,12 @@ class TranscribeSession:
                 if self._stopped:
                     break
                 frame = ev.frame
-                self._total_seconds += frame.samples_per_channel / frame.sample_rate
+                dur = frame.samples_per_channel / frame.sample_rate
+                self._total_seconds += dur
+                self._stream_audio_s += dur
+                self._marks.append((self._stream_audio_s, time.monotonic()))
+                if len(self._marks) > 6000:      # ~60s at 10ms frames — plenty
+                    del self._marks[:2000]
                 for _ in range(2):
                     try:
                         await self._stream.input_stream.send_audio_event(audio_chunk=bytes(frame.data))
@@ -88,11 +116,17 @@ class TranscribeSession:
         self._stream = await client.start_stream_transcription(
             language_code=self.language, media_sample_rate_hz=16_000, media_encoding="pcm",
         )
+        # result.end_time restarts at 0 for the new stream — reset the mark table.
+        # ponytail: mid-stream trim above can drop marks for a >60s continuous
+        # monologue; then _recv_ts_for understates lag for that one result.
+        self._marks.clear()
+        self._stream_audio_s = 0.0
         self._handler_task = asyncio.create_task(self._drain())
 
     async def _drain(self) -> None:
         try:
-            await _Handler(self._stream.output_stream, self.speaker, self.on_final).handle_events()
+            await _Handler(self._stream.output_stream, self.speaker,
+                           self.on_final, self).handle_events()
         except asyncio.CancelledError:
             raise
         except Exception as e:  # noqa: BLE001 — stream ended; run()'s send will reopen

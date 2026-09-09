@@ -8,8 +8,9 @@ eval dataset), runs the full listen -> transcribe -> extract -> persist path, th
 
     python run.py --rooms 5
 
-The LiveKit fan-out (connect/publish/subscribe for N rooms) works today; the
-Transcribe + Bedrock legs need the AWS new-account window to clear.
+Runs the full listen -> transcribe -> extract -> persist path per room. The eval
+name wavs are only a few seconds — too short to trip the 12s debounce — so each
+room relies on finalize() for its one extraction pass.
 """
 
 import argparse
@@ -34,6 +35,7 @@ from livekit import rtc  # noqa: E402
 
 REGION = os.environ.get("AWS_REGION", "us-east-1")
 MODEL = os.environ.get("BEDROCK_MODEL_ID", "")
+BACKEND = os.environ.get("EXTRACT_BACKEND", "gemini")
 LIVEKIT_URL = os.environ["LIVEKIT_URL"]
 AUDIO = ROOT / "eval" / "dataset" / "audio"
 NAMES = ["n01", "n02", "n03", "n04", "n05", "n06", "n07", "n08", "n09", "n10"]
@@ -53,7 +55,7 @@ async def one_room(sb, idx: int, sample_id: str) -> dict:
     session_id = row["id"]
 
     ex = Extractor(room_name=room_name, session_id=session_id, vcc_id=vcc_id,
-                   region=REGION, model_id=MODEL, supabase=sb)
+                   region=REGION, model_id=MODEL, backend=BACKEND, supabase=sb)
     room = rtc.Room()
     tasks: list[asyncio.Task] = []
 
@@ -68,7 +70,11 @@ async def one_room(sb, idx: int, sample_id: str) -> dict:
     await room.connect(LIVEKIT_URL, listener_token(room_name))
     await asyncio.sleep(0.5)
     await publish_track(room_name, "family", AUDIO / f"{sample_id}.wav")
-    await asyncio.sleep(3)
+    await asyncio.sleep(6)          # let Transcribe emit its finals
+    try:
+        await ex.finalize()        # the one extraction pass (audio too short for the debounce)
+    except Exception as e:          # noqa: BLE001 — one bad room must not sink the run
+        print(f"  room {idx} finalize failed: {e!r}"[:160])
     await room.disconnect()
     for t in tasks:
         t.cancel()

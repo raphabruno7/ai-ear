@@ -33,7 +33,7 @@ logger = logging.getLogger("copilot-listener")
 REGION = os.environ.get("AWS_REGION", "us-east-1")
 LIVEKIT_URL = os.environ["LIVEKIT_URL"]
 BEDROCK_MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "")
-EXTRACT_BACKEND = os.environ.get("EXTRACT_BACKEND", "bedrock")  # bedrock | gemini
+EXTRACT_BACKEND = os.environ.get("EXTRACT_BACKEND", "gemini")  # gemini | bedrock (sleep mode)
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL_ID", "gemini-3.6-flash")
 WS_PORT = int(os.environ.get("FIELDS_WS_PORT", 8765))
 
@@ -72,10 +72,11 @@ async def run_listener(room_name: str, vcc_id: str, language: str) -> str:
     room = rtc.Room()
     last_activity = 0.0  # monotonic ts of the last transcript turn
 
-    async def _on_turn(speaker: str, text: str) -> None:
+    async def _on_turn(speaker: str, text: str,
+                       spoken_end_ts: float | None = None, stt_lag_ms: int | None = None) -> None:
         nonlocal last_activity
         last_activity = time.monotonic()
-        await extractor.on_turn(speaker, text)
+        await extractor.on_turn(speaker, text, spoken_end_ts, stt_lag_ms)
 
     def _start(track: rtc.Track, participant: rtc.RemoteParticipant) -> None:
         if track.kind != rtc.TrackKind.KIND_AUDIO:

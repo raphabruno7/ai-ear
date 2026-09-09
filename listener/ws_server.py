@@ -2,7 +2,8 @@
 extension (and the web dashboard, if it wants) subscribe by session.
 
 Client -> server:  {"type": "subscribe", "session_id": "<room>"}
-Server -> client:  {"type": "fields", "session_id": "<room>", "fields": {...}}
+Server -> client:  {"type": "fields", "session_id": "<room>", "fields": {...},
+                    "sent_at": <epoch ms>}   # for a browser-side arrival-lag log
 
 Runs in the listener process. One port, no auth (demo; add a token before prod).
 """
@@ -12,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 
 import websockets
 
@@ -53,7 +55,8 @@ class FieldsWS:
         targets = list(self._subs.get(str(session_id), ()))
         if not targets:
             return
-        payload = json.dumps({"type": "fields", "session_id": str(session_id), "fields": fields})
+        payload = json.dumps({"type": "fields", "session_id": str(session_id),
+                              "fields": fields, "sent_at": time.time() * 1000})
         results = await asyncio.gather(
             *(t.send(payload) for t in targets), return_exceptions=True
         )

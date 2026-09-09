@@ -73,8 +73,12 @@ AWS SES ──► pre-visit briefing email (per session)
   → `call_costs` row `$0.050` total = `$0.045` Transcribe + `$0.0047` Gemini
   (1829 in / 894 out tokens). Scales to ≈ $0.20–0.26 for an 8-min call — STT is
   ~90% of it. `pricing.py` + `/costs` dashboard.
-- **Concurrency:** 6 LiveKit rooms opened in parallel — all connect + publish,
-  no failures, wall 14–19 s each, cross-session data-isolation assert passes.
+- **Concurrency:** 6 LiveKit rooms in parallel — all connect + publish + run the
+  full transcribe→extract→persist path, cross-session data-isolation assert
+  passes. Per-room wall 15–43 s (each waits out its audio + a `finalize()` pass);
+  extraction `latency_ms` p50 ~6.5 s under 6-way contention on a single event
+  loop. (Before 2026-09-09 the harness skipped extraction — the old "14–19 s,
+  no failures" line described connect/publish only.)
 - **Eval — full A/B, Haiku 4.5 vs Gemini 3.6 Flash, 25 hard samples:**
 
   | model (fast tier — not frontier) | names phonetic | names exact | emails exact |
@@ -97,8 +101,30 @@ AWS SES ──► pre-visit briefing email (per session)
   + `call_costs` in Supabase → `/session/<id>` + `/costs`. Two consecutive runs:
   14 turns each, **7/7 fields** (`owner_name` "Kathleen O'Brien", phone, email,
   `pet_name` "Luna", `visit_type` "sick" inferred, `preferred_time`,
-  `clinical_notes`), per-field latency 4–5s, clean teardown. `EXTRACT_BACKEND`
-  toggles Vertex ⇄ Bedrock at runtime.
+  `clinical_notes`), clean teardown. `EXTRACT_BACKEND` toggles Vertex ⇄ Bedrock
+  at runtime.
+- **Speech → screen latency, by stage (2026-09-09).** Each extraction pass now
+  records where the time goes — end of speech → stabilised transcript (`stt_lag`),
+  → pass fires (`debounce`), → LLM response (`latency_ms`), → field persisted
+  (`e2e`). Written to `extracted_fields`, shown on `/session/<id>`. Two live runs
+  (49 s fixture, Gemini 3.6 Flash):
+
+  | stage | p50 | p95 |
+  |---|--:|--:|
+  | STT lag (AWS Transcribe) | ~0.6 s | ~0.6–1.4 s |
+  | Debounce wait | ~0 s | ~0 s |
+  | LLM extraction call | ~3–4.5 s | ~6–7 s |
+  | **End to end** (speech → field in DB) | **~3.7–5 s** | **~6.4–7.5 s** |
+
+  The LLM call dominates. Debounce ≈ 0 **on this fixture** because the 4-turns
+  gate trips before the 12 s timer (turns ~3.5 s apart), so a pass fires on the
+  turn that trips it — its cost here is *staleness of earlier turns*, not delay
+  on the triggering one. A slower call where the 12 s timer wins would show a
+  real debounce leg; `bench_latency.py` measures that separately. Stage values
+  are per-pass, replicated onto every field of that pass, not per-field
+  independent samples, and `stt_lag + debounce + llm` reconciles with `e2e` to
+  ±200 ms (mark-timestamp vs turn-timestamp capture gap). Browser fill adds a
+  few ms on top (`[copilot] ws->browser` console log; localhost, no clock skew).
 
 ## Demo-ready now
 

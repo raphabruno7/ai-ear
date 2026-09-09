@@ -99,7 +99,11 @@ end-to-end (2026-09-01). `pricing.py` `LLM_RATES` has per-backend rates.
   CGNAT breaks WebRTC UDP; signalling connects, media doesn't).
 - **Bedrock** — throttle cleared ~2026-09-02; **sleep mode** (default is Gemini).
   Set `EXTRACT_BACKEND=bedrock` for the Haiku-vs-Gemini A/B.
-- **Migration `005`** — ✅ run 2026-09-02. **Langfuse** — ✅ listener + eval trace (v4).
+- **Migrations `005`** ✅ 2026-09-02, **`006`** (latency stage columns) ✅ 2026-09-09.
+  **Langfuse** — ✅ listener + eval trace (v4).
+- **Speech→screen latency** — `extracted_fields` has `stt_lag_ms` / `debounce_ms`
+  / `e2e_ms` per pass (`transcribe_stream` measures STT lag against a frame-arrival
+  mark table; `extract._latency_stages` does the rest). Shown on `/session/<id>`.
 - **Next:** STT custom vocabulary (needs `transcribe:CreateVocabulary` on the IAM
   policy) — the fix for the accuracy bottleneck the A/B identified.
 
