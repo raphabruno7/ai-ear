@@ -120,9 +120,16 @@ end-to-end (2026-09-01). `pricing.py` `LLM_RATES` has per-backend rates.
 
 ## Deploy
 
-- Remote: `origin` → `github.com/raphabruno7/ai-ear`. Push `main` →
-  nothing auto-deploys yet (no Railway/Vercel hookup).
-- Intended: `listener/` → Railway (Dockerfile + railway.toml), `web/` → Vercel.
+- **web/ → Vercel** ✅ 2026-09-09. Project `call-copilot`, prod alias
+  **`call-copilot-liart.vercel.app`** (behind `ADMIN_SECRET` login). Env vars set
+  via `vercel env` (Supabase, ADMIN_SECRET, + the health-check keys). `vercel --prod`
+  from `web/`. `/api/health` → 4/4 green.
+- **listener/ → Railway** — code ready (`agent.py --watch call-`, Dockerfile,
+  `railway.toml` healthcheck `/health`). **Blocked:** Railway trial expired, needs
+  a paid plan. On Railway set `EXTRACT_BACKEND=bedrock` (Vertex ADC won't work in
+  a container without a GCP service-account key).
+- `.env.local` in `web/` is a **symlink → ../.env**; `vercel link` writes
+  `VERCEL_OIDC_TOKEN` through it into `.env` — strip that line if it reappears.
 
 ## Git
 

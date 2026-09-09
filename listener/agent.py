@@ -4,19 +4,19 @@ running transcript to the incremental field extractor.
 
 No TTS. No audio published. This agent never speaks.
 
-    python agent.py --room demo-1 [--vcc vcc-1] [--language en-US]
+    python agent.py --room demo-1              # one room, exit when it ends
+    python agent.py --watch call-              # service mode: join every new
+                                              # room whose name starts with the prefix
 
-Deploys to Railway (Dockerfile). In production a room is assigned via an HTTP
-trigger; for the demo the room name is a CLI arg.
+Deploys to Railway (Dockerfile) in --watch mode. One shared fields WebSocket
+serves all concurrent rooms, keyed by session id.
 """
 
 import argparse
 import asyncio
 import logging
 import os
-import threading
 import time
-from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from dotenv import load_dotenv
 from livekit import rtc
@@ -36,7 +36,8 @@ LIVEKIT_URL = os.environ["LIVEKIT_URL"]
 BEDROCK_MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "")
 EXTRACT_BACKEND = os.environ.get("EXTRACT_BACKEND", "gemini")  # gemini | bedrock (sleep mode)
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL_ID", "gemini-3.6-flash")
-WS_PORT = int(os.environ.get("FIELDS_WS_PORT", 8765))
+# one port for the fields WS + /health. Railway sets $PORT; default 8765 locally.
+WS_PORT = int(os.environ.get("FIELDS_WS_PORT") or os.environ.get("PORT") or 8765)
 TRANSCRIBE_VOCAB = os.environ.get("TRANSCRIBE_VOCAB") or None
 AUDIO_APM = os.environ.get("AUDIO_APM") or ""   # e.g. "ns,hpf,agc"; empty = passthrough
 
@@ -46,7 +47,8 @@ def _supabase():
     return create_client(os.environ["NEXT_PUBLIC_SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
 
 
-async def run_listener(room_name: str, vcc_id: str, language: str) -> str:
+async def run_listener(room_name: str, vcc_id: str, language: str,
+                       fields_ws: FieldsWS | None = None) -> str:
     sb = _supabase()
     row = sb.table("sessions").upsert(
         {"room_name": room_name, "vcc_id": vcc_id, "call_source": "sim"},
@@ -55,8 +57,10 @@ async def run_listener(room_name: str, vcc_id: str, language: str) -> str:
     session_id = row["id"]
     logger.info("session %s (room=%s vcc=%s)", session_id, room_name, vcc_id)
 
-    fields_ws = FieldsWS(port=WS_PORT)
-    await fields_ws.start()
+    own_ws = fields_ws is None      # --room path owns its WS; --watch shares one
+    if own_ws:
+        fields_ws = FieldsWS(port=WS_PORT)
+        await fields_ws.start()
 
     extractor = Extractor(
         room_name=room_name,
@@ -140,7 +144,10 @@ async def run_listener(room_name: str, vcc_id: str, language: str) -> str:
     total_audio = sum(ts.audio_seconds for ts in sessions.values())
     extractor.add_stt_seconds(total_audio)
     # best-effort teardown — a network blip at end-of-call must not crash the process
-    for step in (extractor.finalize(), extractor.flush(), fields_ws.stop()):
+    teardown = [extractor.finalize(), extractor.flush()]
+    if own_ws:
+        teardown.append(fields_ws.stop())
+    for step in teardown:
         try:
             await step
         except Exception:  # noqa: BLE001
@@ -155,38 +162,54 @@ async def run_listener(room_name: str, vcc_id: str, language: str) -> str:
     return session_id
 
 
-# ── health server (Railway) ──────────────────────────────────────────────
-class _HealthHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        if self.path == "/health":
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(b'{"status":"ok"}')
-        else:
-            self.send_response(404)
-            self.end_headers()
+async def watch(prefix: str, vcc_id: str, language: str, poll_s: float = 3.0) -> None:
+    """Service mode: poll LiveKit for new rooms matching `prefix`, run a listener
+    for each. One shared fields WebSocket for all of them."""
+    from livekit import api
 
-    def log_message(self, *_a):
-        pass
-
-
-def _start_health_server(port: int) -> None:
-    srv = HTTPServer(("", port), _HealthHandler)
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
-    logger.info("health server on :%d", port)
+    fields_ws = FieldsWS(port=WS_PORT)
+    await fields_ws.start()
+    lkapi = api.LiveKitAPI(LIVEKIT_URL)
+    seen: dict[str, asyncio.Task] = {}   # every room name ever served — LiveKit keeps
+                                         # an empty room alive for minutes; don't re-join it
+    logger.info("watching for rooms '%s*' (poll %.0fs)", prefix, poll_s)
+    try:
+        while True:
+            try:
+                resp = await lkapi.room.list_rooms(api.ListRoomsRequest())
+                for room in resp.rooms:
+                    if room.name.startswith(prefix) and room.name not in seen:
+                        logger.info("new room %s — starting listener", room.name)
+                        seen[room.name] = asyncio.create_task(
+                            run_listener(room.name, vcc_id, language, fields_ws)
+                        )
+            except Exception as e:  # noqa: BLE001 — a poll blip must not kill the service
+                logger.warning("room poll failed: %s", e)
+            for name, t in seen.items():
+                if t.done() and not getattr(t, "_logged_done", False):
+                    t._logged_done = True  # type: ignore[attr-defined]
+                    if t.exception():
+                        logger.warning("listener for %s crashed: %r", name, t.exception())
+            await asyncio.sleep(poll_s)
+    finally:
+        await lkapi.aclose()
+        await fields_ws.stop()
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--room", required=True)
+    g = ap.add_mutually_exclusive_group(required=True)
+    g.add_argument("--room", help="join one room, exit when it ends")
+    g.add_argument("--watch", metavar="PREFIX",
+                   help="service mode: join every new room whose name starts with PREFIX")
     ap.add_argument("--vcc", default="vcc-1")
     ap.add_argument("--language", default="en-US")
-    ap.add_argument("--health-port", type=int, default=int(os.environ.get("PORT", 8081)))
     args = ap.parse_args()
 
-    _start_health_server(args.health_port)
-    asyncio.run(run_listener(args.room, args.vcc, args.language))
+    if args.watch:
+        asyncio.run(watch(args.watch, args.vcc, args.language))
+    else:
+        asyncio.run(run_listener(args.room, args.vcc, args.language))
 
 
 if __name__ == "__main__":

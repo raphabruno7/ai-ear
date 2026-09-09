@@ -206,6 +206,16 @@ AWS SES ──► pre-visit briefing email (per session)
 - `eval/run.py` — full A/B (both models), `/eval` dashboard, `eval_runs` rows.
 - `briefing.py` — real SES email.
 
+## Deploy
+
+- **Dashboard — live on Vercel** (`call-copilot-liart.vercel.app`, 2026-09-09).
+  Behind an `ADMIN_SECRET` login (it reads Supabase with the service-role key).
+  `/api/health` → 4/4 green against the real infra.
+- **Listener — deployable, not deployed.** `agent.py --watch call-` runs it as a
+  service (polls LiveKit for new rooms, one shared fields-WS + `/health` on one
+  port); Dockerfile + `railway.toml` ready. Railway account is on an expired
+  trial — needs a paid plan to push.
+
 ## Pending (not code)
 
 - **STT accuracy lever** — ✅ Transcribe custom vocabulary + ✅ Deepgram Nova-3
@@ -215,9 +225,10 @@ AWS SES ──► pre-visit briefing email (per session)
   holds across 3 vendors.
 - **Extension MV3 shell** — one manual load-unpacked pass (the WS+fill logic is
   already verified programmatically).
+- **SIP / real phone call** — LiveKit SIP trunk + a number; the `--watch`
+  dispatcher already handles dynamically-created rooms.
 
 ## What this is not
 
-A deployed product with real users. It's a hands-on model of the problem —
-verified end to end against a simulated call, not tested on live production
-traffic.
+A product with real users. The dashboard is deployed; the listener runs against
+a *simulated* two-party call (`sim_call.py`), not live phone traffic.
