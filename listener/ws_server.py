@@ -6,11 +6,14 @@ Server -> client:  {"type": "fields", "session_id": "<room>", "fields": {...},
                     "sent_at": <epoch ms>}   # for a browser-side arrival-lag log
 
 Runs in the listener process. One port, no auth (demo; add a token before prod).
+Also answers GET `health_path` with 200 so a single port covers the WS + the
+platform health check (Railway).
 """
 
 from __future__ import annotations
 
 import asyncio
+import http
 import json
 import logging
 import time
@@ -21,14 +24,22 @@ logger = logging.getLogger("copilot-listener.ws")
 
 
 class FieldsWS:
-    def __init__(self, port: int = 8765):
+    def __init__(self, port: int = 8765, health_path: str = "/health"):
         self.port = port
+        self.health_path = health_path
         self._subs: dict[str, set] = {}
         self._server = None
 
+    def _process_request(self, connection, request):
+        if request.path.split("?")[0] == self.health_path:
+            return connection.respond(http.HTTPStatus.OK, '{"status":"ok"}\n')
+        return None  # proceed with the WebSocket handshake
+
     async def start(self) -> None:
-        self._server = await websockets.serve(self._handle, "", self.port)
-        logger.info("fields WS on :%d", self.port)
+        self._server = await websockets.serve(
+            self._handle, "", self.port, process_request=self._process_request,
+        )
+        logger.info("fields WS + %s on :%d", self.health_path, self.port)
 
     async def stop(self) -> None:
         if self._server:
