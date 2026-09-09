@@ -58,19 +58,27 @@ The answer, on hard non-English names: no.
 
 | Option | Streaming | Non-English names / accent | Notes |
 |---|---|---|---|
-| **AWS Transcribe** (here) | ✅ | weak | custom vocabulary + IPA pronunciation + custom language model can help |
-| **Deepgram Nova-3** | ✅ (built for it) | good | keyterm prompting (inline domain terms); ~3× cheaper than Transcribe |
+| **AWS Transcribe** (live listener) | ✅ | weak — ~60% names phonetic | custom vocabulary helps spelling, not acoustics; $0.024/min |
+| **Deepgram Nova-3** (eval, benchmarked) | ✅ (built for it) | **better — 67% Haiku / 80% Gemini names phonetic** | keyterm prompting; $0.0048/min streaming (~5× cheaper) |
 | **Speechmatics** | ✅ (sub-500ms) | best on accented English | one model per language covers all regional variants |
 | **gpt-4o-transcribe** | ✅ (Realtime API) | good | OpenAI-hosted |
 | **Whisper** (`whisper-1`) | ❌ batch | good accuracy | too slow for a live call; deployable on SageMaker if latency budget allows |
 
 **Ranked plan:**
-1. **AWS Transcribe custom vocabulary** — stays fully in AWS, costs nothing;
-   feed common owner/pet surnames + the golden-set hard terms; re-run the eval,
-   show the delta. (Needs `transcribe:CreateVocabulary` on the IAM policy.)
-2. **Benchmark Deepgram Nova-3** as a 2nd STT in `eval/models.py` — same A/B
-   method as the LLMs. "Swappable, benchmarked STT backend" mirrors the LLM story.
-3. Custom language model on Transcribe, or Speechmatics, if 1–2 fall short.
+1. ✅ **AWS Transcribe custom vocabulary** (done 2026-09-07) — `eval/build_vocab.py`,
+   Phrases list from the golden-set surnames, `TRANSCRIBE_VOCAB` env. Fixes
+   seeded surnames in the transcript ("Wozkowski"→"Wojciechowski"); downstream
+   field accuracy within noise (`EVIDENCE.md`). `SoundsLike`/IPA would reach the
+   acoustic misses but needs the S3 table format (extra IAM + a bucket).
+2. ✅ **Deepgram Nova-3 A/B** (done 2026-09-09) — `eval/run.py --stt deepgram`,
+   `transcribe_deepgram` prerecorded API, Nova-3 keyterms = the seeded names.
+   Result: names phonetic ~60% → **67% (Haiku) / 80% (Gemini)**, names exact
+   33–53% → **60%**, emails flat (control). **Cost**: Nova-3 streaming
+   $0.0048/min vs Transcribe $0.024/min — **~5× cheaper**. Both directions win.
+3. **Port the live listener to Nova-3** — `transcribe_stream.py` currently
+   streams AWS. Deepgram has a streaming WS API; the eval used prerecorded.
+   This is the next real change.
+4. Custom language model on Transcribe, or Speechmatics, if 2–3 fall short.
 
 ## Next (cost / latency)
 - **Prompt caching** (Bedrock): the system prompt + tool schema are constant —

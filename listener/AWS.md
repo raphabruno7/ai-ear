@@ -48,6 +48,14 @@ The listener needs one IAM user with access to **Bedrock** (extraction),
       "Resource": "*"
     },
     {
+      "Sid": "TranscribeVocabulary",
+      "Effect": "Allow",
+      "Action": ["transcribe:CreateVocabulary", "transcribe:UpdateVocabulary",
+                 "transcribe:GetVocabulary", "transcribe:ListVocabularies",
+                 "transcribe:DeleteVocabulary"],
+      "Resource": "*"
+    },
+    {
       "Sid": "SES",
       "Effect": "Allow",
       "Action": ["ses:SendEmail"],

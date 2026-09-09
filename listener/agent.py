@@ -36,6 +36,7 @@ BEDROCK_MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "")
 EXTRACT_BACKEND = os.environ.get("EXTRACT_BACKEND", "gemini")  # gemini | bedrock (sleep mode)
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL_ID", "gemini-3.6-flash")
 WS_PORT = int(os.environ.get("FIELDS_WS_PORT", 8765))
+TRANSCRIBE_VOCAB = os.environ.get("TRANSCRIBE_VOCAB") or None
 
 
 def _supabase():
@@ -83,7 +84,7 @@ async def run_listener(room_name: str, vcc_id: str, language: str) -> str:
             return
         speaker = participant.identity  # "vcc" | "family"
         stream = rtc.AudioStream(track, sample_rate=16_000, num_channels=1)
-        ts = TranscribeSession(speaker, _on_turn, REGION, language)
+        ts = TranscribeSession(speaker, _on_turn, REGION, language, vocabulary=TRANSCRIBE_VOCAB)
         sessions[participant.sid] = ts
         logger.info("transcribing track from %s", speaker)
         asyncio.create_task(ts.run(stream))

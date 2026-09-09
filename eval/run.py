@@ -25,7 +25,7 @@ import sys  # noqa: E402
 sys.path.insert(0, str(HERE.parent / "listener"))
 import pricing  # noqa: E402
 from metrics import score  # noqa: E402
-from models import EXTRACTORS, LAST_USAGE, transcribe_file  # noqa: E402
+from models import EXTRACTORS, LAST_USAGE, transcribe_deepgram, transcribe_file  # noqa: E402
 from trace import span, flush as trace_flush  # noqa: E402
 
 SAMPLES = HERE / "dataset" / "samples.jsonl"
@@ -47,11 +47,31 @@ async def main() -> None:
     ap.add_argument("--models", nargs="+", default=list(EXTRACTORS), choices=list(EXTRACTORS))
     ap.add_argument("--limit", type=int)
     ap.add_argument("--sleep", type=float, default=0, help="seconds between samples (free-tier pacing)")
+    ap.add_argument("--vocab", default=os.environ.get("TRANSCRIBE_VOCAB"),
+                    help="Transcribe custom vocabulary name (default: $TRANSCRIBE_VOCAB)")
+    ap.add_argument("--no-vocab", action="store_true", help="force vocabulary off (before-run)")
+    ap.add_argument("--stt", choices=("aws", "deepgram"), default="aws",
+                    help="transcription engine (deepgram = Nova-3, needs DEEPGRAM_API_KEY)")
     args = ap.parse_args()
+    vocab = None if args.no_vocab else (args.vocab or None)
+    if args.stt == "deepgram" and not os.environ.get("DEEPGRAM_API_KEY"):
+        raise SystemExit("--stt deepgram needs DEEPGRAM_API_KEY (free tier at deepgram.com)")
+    print(f"stt: {args.stt}    custom vocabulary: {vocab or 'none'}")
 
     rows = [json.loads(l) for l in SAMPLES.read_text().splitlines() if l.strip()]
     if args.limit:
         rows = rows[: args.limit]
+
+    # Deepgram Nova-3 keyterms = the AWS custom-vocabulary analogue: same seeded
+    # names, only when --vocab is active so the two engines are compared fairly.
+    keyterms = ([s["expected"] for s in rows if s["kind"] == "name"] if vocab else None)
+
+    # what the chosen engine actually used for name seeding — so the report
+    # header can't imply an AWS vocabulary helped a Deepgram run (or vice versa).
+    if args.stt == "deepgram":
+        seeding = f"Nova-3 keyterms ({len(keyterms)} names)" if keyterms else "none"
+    else:
+        seeding = f"custom vocabulary {vocab}" if vocab else "none"
 
     run_id = time.strftime("%Y%m%d-%H%M%S")
     sb = _supabase()
@@ -64,7 +84,10 @@ async def main() -> None:
             print(f"skip {s['id']} (no audio — run make_dataset.py)")
             continue
         try:
-            transcript = await transcribe_file(str(wav), REGION)
+            if args.stt == "deepgram":
+                transcript = await transcribe_deepgram(str(wav), keyterms=keyterms)
+            else:
+                transcript = await transcribe_file(str(wav), REGION, vocab=vocab)
         except Exception as e:  # noqa: BLE001 — network blip, skip this sample
             print(f"  {s['id']:>4} transcribe ERROR {e!r}"[:160])
             continue
@@ -94,7 +117,7 @@ async def main() -> None:
             await asyncio.sleep(args.sleep)
 
     trace_flush()
-    _report(run_id, args.models, results, transcripts)  # always, from memory
+    _report(run_id, args.models, results, transcripts, seeding, args.stt)  # always, from memory
 
     # Supabase is best-effort — a network blip must not lose the run.
     if sb and results:
@@ -106,8 +129,11 @@ async def main() -> None:
 
 
 def _report(run_id: str, models: list[str], results: list[dict],
-            transcripts: dict[str, str] | None = None) -> None:
-    lines = [f"# Eval run {run_id}", ""]
+            transcripts: dict[str, str] | None = None, seeding: str = "none",
+            stt: str = "aws") -> None:
+    engine = {"aws": "AWS Transcribe", "deepgram": "Deepgram Nova-3"}.get(stt, stt)
+    lines = [f"# Eval run {run_id}", "",
+             f"stt: {engine}    name seeding: {seeding}", ""]
     lines.append("| model | kind | n | exact | phonetic | mean WER | mean lev |")
     lines.append("|---|---|--:|--:|--:|--:|--:|")
     for model in models:
@@ -134,10 +160,10 @@ def _report(run_id: str, models: list[str], results: list[dict],
                   and all(not x["phonetic_ok"] for x in results if x["sample_id"] == sid)]
         if shared:
             lines += ["", "## STT is the bottleneck", "",
-                      "Samples **every** model got wrong — because AWS Transcribe "
+                      f"Samples **every** model got wrong — because {engine} "
                       "mis-heard the audio and both models faithfully returned what "
                       "they were given:", "",
-                      "| sample | expected | Transcribe heard | " +
+                      f"| sample | expected | {engine} heard | " +
                       " | ".join(models) + " |",
                       "|---|---|---|" + "---|" * len(models)]
             def _cell(s: str) -> str:

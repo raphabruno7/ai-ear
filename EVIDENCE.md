@@ -96,13 +96,51 @@ AWS SES ──► pre-visit briefing email (per session)
   Recovering the original would be hallucination, not reasoning. **The accuracy
   lever is the
   transcription layer** — `OPTIMIZATION.md` has the vendor comparison + ranked plan.
+- **STT custom vocabulary — measured, 2026-09-07.** `eval/build_vocab.py` seeds
+  AWS Transcribe with the golden-set owner surnames (in production: the clinic's
+  patient roster). Phrases-list format — it biases what Transcribe *hears*.
+  Where it lands, it fixes the transcript at the source:
+
+  | sample | Transcribe heard — before | with vocabulary |
+  |---|---|---|
+  | n07 `Michał Wojciechowski` | "Mitchell **Wozkowski**" | "Mitchell **Wojciechowski**" |
+  | n05 `Nguyen Thi Hoa` | "**Nguyenihoa**" | "**Nguyen** … **Hoa**" |
+  | e06 `…@icloud.com` | "@**iCloud**.com" | "@**icloud**.com" |
+
+  Downstream field accuracy moved but within noise: names phonetic flat at ~60%
+  (both models), names exact 33–47% → 33–53% across runs — the metric wobbles
+  ±2 samples on n=15 with non-deterministic formatting. Emails (**not** seeded —
+  control) stayed flat at 30%. The residual phonetic misses ("Aoife Ní
+  Bhraonáin", "Xiuying Zhang", first-name "Michał"→"Mitchell") are acoustic, not
+  spelling — a Phrases list can't reach them.
+- **Second STT — Deepgram Nova-3 vs AWS Transcribe (2026-09-09).** Same 25
+  samples, same two LLMs, same method as the model A/B — only the transcription
+  engine swaps. Nova-3 keyterm prompting carries the same seeded names as the
+  AWS vocabulary.
+
+  | names, phonetic | AWS Transcribe + vocab | Deepgram Nova-3 + keyterms |
+  |---|--:|--:|
+  | Claude Haiku 4.5 | ~60% | **67%** |
+  | Gemini 3.6 Flash | ~60% | **80%** |
+  | names exact (both) | 33–53% | **60%** |
+  | emails exact (control) | 30% | 30% |
+  | shared STT misses | 12–13 | **10** |
+
+  Nova-3 recovers what a Phrases list couldn't: "Nguyen Thi Hoa", "Priya
+  Rajagopalan", "Xiuying Zhang", "Rhys Llewellyn" all land exact. The 3 residual
+  name misses ("Aoife Ní Bhraonáin", "Seán Mac Cárthaigh", "Björn Andersson")
+  are Gaelic/Nordic and hard for any engine. Spelled-out emails stay bad on both
+  — no STT parses "s underscore gallagher at yahoo dot co dot uk" reliably.
+  **And it's ~5× cheaper**: Nova-3 $0.0048/min streaming vs Transcribe
+  $0.024/min — a win on accuracy *and* cost. `eval/run.py --stt deepgram`.
 - **Full live e2e — verified 2026-09-07.** LiveKit room → 2 simulated speakers →
   per-speaker AWS Transcribe → Gemini extraction (Vertex AI) → `extracted_fields`
   + `call_costs` in Supabase → `/session/<id>` + `/costs`. Two consecutive runs:
   14 turns each, **7/7 fields** (`owner_name` "Kathleen O'Brien", phone, email,
   `pet_name` "Luna", `visit_type` "sick" inferred, `preferred_time`,
   `clinical_notes`), clean teardown. `EXTRACT_BACKEND` toggles Vertex ⇄ Bedrock
-  at runtime.
+  at runtime. (The live listener streams AWS Transcribe; Deepgram Nova-3 is wired
+  in the eval harness, not yet in the listener.)
 - **Speech → screen latency, by stage (2026-09-09).** Each extraction pass now
   records where the time goes — end of speech → stabilised transcript (`stt_lag`),
   → pass fires (`debounce`), → LLM response (`latency_ms`), → field persisted
@@ -137,8 +175,9 @@ AWS SES ──► pre-visit briefing email (per session)
 
 ## Pending (not code)
 
-- **STT accuracy lever** — Transcribe custom vocabulary, then benchmark Deepgram
-  Nova-3 as a second STT (same A/B method as the LLMs). `OPTIMIZATION.md`.
+- **STT accuracy lever** — ✅ Transcribe custom vocabulary + ✅ Deepgram Nova-3
+  A/B, both measured (see Real numbers). Nova-3 wins on names and cost — porting
+  the live listener to it is the next step. `OPTIMIZATION.md`.
 - **3rd model in the A/B** — add gpt-4o-mini so "swap the model, same misses"
   holds across 3 vendors.
 - **Extension MV3 shell** — one manual load-unpacked pass (the WS+fill logic is
