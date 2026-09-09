@@ -108,9 +108,9 @@ end-to-end (2026-09-01). `pricing.py` `LLM_RATES` has per-backend rates.
   env (`transcribe_stream.py`, `agent.py`, `eval/run.py --vocab`). Fixes seeded
   surnames at the source; downstream accuracy within noise. Deep phonetic misses
   need `SoundsLike` (S3 table) or a 2nd STT.
-- **Deepgram Nova-3 A/B** — code wired (`eval/run.py --stt deepgram`,
-  `transcribe_deepgram` in `eval/models.py`, Nova-3 keyterms = seeded names).
-  **Next:** add `DEEPGRAM_API_KEY` (free tier), run it, record the delta.
+- **Deepgram Nova-3 A/B** — ✅ measured 2026-09-09 (`DEEPGRAM_API_KEY` in `.env`).
+  Names phonetic ~60% → 67% (Haiku) / 80% (Gemini), ~5× cheaper than Transcribe.
+  **Next:** port the live listener (`transcribe_stream.py`) from AWS to Nova-3.
 
 ## Deploy
 
