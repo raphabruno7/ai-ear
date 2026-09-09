@@ -110,6 +110,8 @@ class Extractor:
     _in_tokens: int = 0
     _out_tokens: int = 0
     _stt_seconds: float = 0.0
+    _last_spoken_end: float | None = None      # monotonic ts of the last utterance's end
+    _last_stt_lag_ms: int | None = None        # STT lag reported with that utterance
 
     def merge(self, name: str, value: str, confidence: float) -> bool:
         """Returns True if the field changed (new or higher-confidence value)."""
@@ -126,10 +128,14 @@ class Extractor:
     def turns(self) -> list[tuple[str, str]]:
         return list(self._transcript)
 
-    async def on_turn(self, speaker: str, text: str) -> None:
+    async def on_turn(self, speaker: str, text: str,
+                      spoken_end_ts: float | None = None, stt_lag_ms: int | None = None) -> None:
         self._transcript.append((speaker, text))
         self._turns_since_extract += 1
         logger.info("[%s] %s", speaker, text)
+        if spoken_end_ts is not None:
+            self._last_spoken_end = spoken_end_ts
+            self._last_stt_lag_ms = stt_lag_ms
 
         now = time.monotonic()
         # debounce: extract once the call has settled a bit, not on every utterance
@@ -138,21 +144,23 @@ class Extractor:
         self._last_extract = now
         self._turns_since_extract = 0
 
-        changed = await self._extract(now)
+        changed = await self._extract(now, self._last_spoken_end)
         if changed and self.ws_broadcast:
             await self.ws_broadcast(self.session_id, self.snapshot())
 
     async def finalize(self) -> None:
         """One last extraction over the full transcript at end of call."""
         if self._transcript:
-            changed = await self._extract(time.monotonic())
+            # no meaningful debounce/e2e for the end-of-call pass — pass None
+            changed = await self._extract(time.monotonic(), None)
             if changed and self.ws_broadcast:
                 await self.ws_broadcast(self.session_id, self.snapshot())
 
-    async def _persist(self, name: str, value: str, confidence: float, latency_ms: int) -> None:
+    async def _persist(self, name: str, value: str, confidence: float,
+                       latency_ms: int, stages: dict | None = None) -> None:
         if not self.supabase or not self.session_id:
             return
-        self.supabase.table("extracted_fields").insert({
+        row = {
             "session_id": self.session_id,
             "vcc_id": self.vcc_id,
             "field_name": name,
@@ -160,7 +168,24 @@ class Extractor:
             "confidence": confidence,
             "model": self.backend,
             "latency_ms": latency_ms,
-        }).execute()
+            **(stages or {}),
+        }
+        try:
+            self.supabase.table("extracted_fields").insert(row).execute()
+            return
+        except Exception as e:  # noqa: BLE001 — a persist failure must not kill the call
+            first_err = e
+        if any(k in row for k in ("stt_lag_ms", "debounce_ms", "e2e_ms")):
+            # migration 006 not applied yet — retry with the base columns only
+            for k in ("stt_lag_ms", "debounce_ms", "e2e_ms"):
+                row.pop(k, None)
+            try:
+                self.supabase.table("extracted_fields").insert(row).execute()
+                logger.warning("persist %s: stage columns missing (migration 006?), stored without them", name)
+                return
+            except Exception as e:  # noqa: BLE001
+                first_err = e
+        logger.warning("persist %s failed: %s", name, first_err)
 
     def _bedrock_client(self):
         if self._bedrock is None:
@@ -217,7 +242,7 @@ class Extractor:
             self._out_tokens += getattr(u, "candidates_token_count", 0) or 0
         return _parse_json_fields(resp.text or "")
 
-    async def _extract(self, turn_ts: float) -> bool:
+    async def _extract(self, turn_ts: float, spoken_end_ts: float | None = None) -> bool:
         if self.backend == "bedrock" and not self.model_id:
             return False
         convo = "\n".join(f"{spk}: {txt}" for spk, txt in self._transcript)
@@ -231,12 +256,18 @@ class Extractor:
                 sp.update(level="WARNING", status_message=str(e))
                 return False
 
-            latency_ms = int((time.monotonic() - turn_ts) * 1000)
+            latency_ms = int((time.monotonic() - turn_ts) * 1000)  # LLM leg only
             d_in, d_out = self._in_tokens - tin0, self._out_tokens - tout0
+            # per-pass latency breakdown, replicated onto every field of this pass:
+            # "time from the last utterance ending to this field appearing".
+            # Not per-field independent samples — see 006 migration comment.
+            stages = _latency_stages(spoken_end_ts, turn_ts, time.monotonic(),
+                                     self._last_stt_lag_ms)
             sp.update(
                 output=emitted,
                 model=self.gemini_model if self.backend == "gemini" else self.model_id,
-                metadata={"latency_ms": latency_ms, "backend": self.backend},
+                metadata={"latency_ms": latency_ms, "backend": self.backend,
+                          "session_id": self.session_id, "room": self.room_name, **stages},
                 usage_details={"input": d_in, "output": d_out},
                 cost_details={"total": pricing.llm_cost(d_in, d_out, self.backend)},
             )
@@ -248,7 +279,7 @@ class Extractor:
             conf = float(f.get("confidence", 0) or 0)
             if name in FIELD_NAMES and value and self.merge(name, value, conf):
                 changed = True
-                await self._persist(name, value, conf, latency_ms)
+                await self._persist(name, value, conf, latency_ms, stages)
         return changed
 
     def add_stt_seconds(self, seconds: float) -> None:
@@ -275,6 +306,23 @@ class Extractor:
             }).execute()
         except Exception as e:  # noqa: BLE001
             logger.warning("cost flush failed: %s", e)
+
+
+def _latency_stages(spoken_end_ts: float | None, turn_ts: float, now: float,
+                    stt_lag_ms: int | None) -> dict[str, int]:
+    """Per-pass latency breakdown from end-of-speech to field-landed.
+
+    stt_lag (speech end → final transcript) is measured upstream in
+    transcribe_stream; debounce + LLM are measured here. e2e is the wall total,
+    so stt_lag + debounce + llm ≈ e2e.
+    """
+    if spoken_end_ts is None:
+        return {}
+    stt = stt_lag_ms or 0
+    transcript_ready = spoken_end_ts + stt / 1000          # when the final landed
+    debounce_ms = max(0, int((turn_ts - transcript_ready) * 1000))
+    e2e_ms = int((now - spoken_end_ts) * 1000)
+    return {"stt_lag_ms": stt, "debounce_ms": debounce_ms, "e2e_ms": e2e_ms}
 
 
 def _parse_emitted(resp: dict) -> list[dict]:
@@ -322,6 +370,15 @@ def demo() -> None:
     j2 = _parse_json_fields('{"owner_name": {"value": "Kathleen", "confidence": 0.9}}')
     assert j2 == [{"name": "owner_name", "value": "Kathleen", "confidence": 0.9}], j2
     assert _parse_json_fields("not json") == []
+
+    # latency stages: stt_lag + debounce + llm ≈ e2e
+    spoken_end, turn_ts, now = 100.0, 108.4, 110.9   # seconds on a monotonic clock
+    st = _latency_stages(spoken_end, turn_ts, now, stt_lag_ms=1200)
+    assert st == {"stt_lag_ms": 1200, "debounce_ms": 7200, "e2e_ms": 10900}, st
+    llm_ms = int((now - turn_ts) * 1000)             # 2500
+    assert st["stt_lag_ms"] + st["debounce_ms"] + llm_ms == st["e2e_ms"]
+    assert _latency_stages(None, turn_ts, now, 1200) == {}
+    assert _latency_stages(120.0, 120.1, 121.0, 500)["debounce_ms"] == 0   # clamp
     print("extract demo ok")
 
 

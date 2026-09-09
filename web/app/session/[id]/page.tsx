@@ -11,6 +11,9 @@ type Field = {
   confidence: number;
   model: string;
   latency_ms: number | null;
+  stt_lag_ms: number | null;
+  debounce_ms: number | null;
+  e2e_ms: number | null;
   extracted_at: string;
 };
 
@@ -38,7 +41,7 @@ export default async function SessionPage({ params }: PageProps<"/session/[id]">
     if (session) {
       const f = await sb
         .from("extracted_fields")
-        .select("field_name, field_value, confidence, model, latency_ms, extracted_at")
+        .select("field_name, field_value, confidence, model, latency_ms, stt_lag_ms, debounce_ms, e2e_ms, extracted_at")
         .eq("session_id", id)
         .order("extracted_at", { ascending: true })
         .throwOnError();
@@ -63,10 +66,15 @@ export default async function SessionPage({ params }: PageProps<"/session/[id]">
 
   const latest = new Map<string, Field>();
   for (const r of rows) latest.set(r.field_name, r);
-  const lat = rows
-    .map((r) => r.latency_ms)
-    .filter((n): n is number => n != null)
-    .sort((a, b) => a - b);
+  const sortedNums = (key: keyof Field) =>
+    rows
+      .map((r) => r[key])
+      .filter((n): n is number => typeof n === "number")
+      .sort((a, b) => a - b);
+  const lat = sortedNums("latency_ms"); // LLM leg only
+  const sttLag = sortedNums("stt_lag_ms");
+  const debounce = sortedNums("debounce_ms");
+  const e2e = sortedNums("e2e_ms");
 
   // agent-assist metric: how fast the copilot gets fields onto the VCC's screen
   const start = new Date(session.started_at).getTime();
@@ -112,6 +120,24 @@ export default async function SessionPage({ params }: PageProps<"/session/[id]">
         <Stat label="Extraction p95" value={fmtMs(percentile(lat, 0.95))} />
         <Stat label="Call cost" value={cost ? fmtUSD(Number(cost.usd_total)) : "—"} />
       </section>
+
+      {e2e.length > 0 && (
+        <section className="mt-4">
+          <h2 className="text-sm font-semibold text-zinc-500">
+            Speech → screen latency (per pass, p50 / p95)
+          </h2>
+          <div className="mt-2 grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
+            <Stat label="STT lag" value={`${fmtMs(percentile(sttLag, 0.5))} / ${fmtMs(percentile(sttLag, 0.95))}`} />
+            <Stat label="Debounce" value={`${fmtMs(percentile(debounce, 0.5))} / ${fmtMs(percentile(debounce, 0.95))}`} />
+            <Stat label="LLM" value={`${fmtMs(percentile(lat, 0.5))} / ${fmtMs(percentile(lat, 0.95))}`} />
+            <Stat label="End to end" value={`${fmtMs(percentile(e2e, 0.5))} / ${fmtMs(percentile(e2e, 0.95))}`} />
+          </div>
+          <p className="mt-2 text-xs text-zinc-400">
+            One value per extraction pass, replicated onto each field of that pass — not
+            per-field independent samples. The browser fill adds a few ms on top (localhost).
+          </p>
+        </section>
+      )}
     </div>
   );
 }

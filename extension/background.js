@@ -2,7 +2,7 @@
 // every field update to the content script on the scheduler tab.
 //
 // Message contract (server -> extension):
-//   { type: "fields", session_id, fields: { owner_name, owner_email, ... } }
+//   { type: "fields", session_id, fields: { owner_name, owner_email, ... }, sent_at }
 
 let ws = null;
 let cfg = { wsUrl: "ws://localhost:8765", sessionId: "" };
@@ -25,6 +25,9 @@ function connect() {
     let msg;
     try { msg = JSON.parse(ev.data); } catch { return; }
     if (msg.type === "fields" && msg.session_id === cfg.sessionId) {
+      if (msg.sent_at) {
+        console.log(`[copilot] ws->browser ${Math.round(Date.now() - msg.sent_at)}ms`);
+      }
       broadcast(msg.fields || {});
       chrome.storage.local.set({ lastFields: msg.fields || {} });
     }

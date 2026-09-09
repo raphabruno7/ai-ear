@@ -23,7 +23,9 @@ async def main() -> None:
         await ws.broadcast("s1", {"owner_name": "Kathleen"})
 
         msg = json.loads(await asyncio.wait_for(a.recv(), timeout=2))
-        assert msg == {"type": "fields", "session_id": "s1", "fields": {"owner_name": "Kathleen"}}, msg
+        assert msg["type"] == "fields" and msg["session_id"] == "s1", msg
+        assert msg["fields"] == {"owner_name": "Kathleen"}, msg
+        assert isinstance(msg["sent_at"], (int, float)), msg
 
         # b (session s2) must NOT receive s1's broadcast
         try:
