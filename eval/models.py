@@ -27,7 +27,7 @@ _PROMPT = (
 
 
 async def transcribe_file(path: str, region: str, language: str = "en-US",
-                          vocab: str | None = None) -> str:
+                          vocab: str | None = None, apm=None) -> str:
     from amazon_transcribe.client import TranscribeStreamingClient
     from amazon_transcribe.handlers import TranscriptResultStreamHandler
     from amazon_transcribe.model import TranscriptEvent
@@ -47,10 +47,14 @@ async def transcribe_file(path: str, region: str, language: str = "en-US",
     )
 
     async def pump():
+        import audio_apm
         with wave.open(path) as w:
             assert w.getframerate() == 16_000 and w.getnchannels() == 1
-            step = 16_000 * 50 // 1000  # 50 ms
+            # APM needs exactly 10 ms frames; without it, 50 ms is fine.
+            step = 16_000 * (audio_apm.FRAME_MS if apm else 50) // 1000
             while chunk := w.readframes(step):
+                if apm:                              # no-ops a short trailing frame
+                    chunk = audio_apm.process_pcm(apm, chunk)
                 await stream.input_stream.send_audio_event(audio_chunk=chunk)
                 await asyncio.sleep(0.01)
         await stream.input_stream.end_stream()

@@ -52,11 +52,20 @@ async def main() -> None:
     ap.add_argument("--no-vocab", action="store_true", help="force vocabulary off (before-run)")
     ap.add_argument("--stt", choices=("aws", "deepgram"), default="aws",
                     help="transcription engine (deepgram = Nova-3, needs DEEPGRAM_API_KEY)")
+    ap.add_argument("--noise", choices=("clean", "20", "10", "5"), default="clean",
+                    help="use dataset/audio_noisy/<snr>/ (run make_noisy.py first)")
+    ap.add_argument("--apm", default="", help="WebRTC pre-processing: comma list of ns,hpf,agc")
     args = ap.parse_args()
     vocab = None if args.no_vocab else (args.vocab or None)
     if args.stt == "deepgram" and not os.environ.get("DEEPGRAM_API_KEY"):
         raise SystemExit("--stt deepgram needs DEEPGRAM_API_KEY (free tier at deepgram.com)")
-    print(f"stt: {args.stt}    custom vocabulary: {vocab or 'none'}")
+    if args.apm and args.stt != "aws":
+        raise SystemExit("--apm only applies to --stt aws (it's the live-listener path)")
+    import audio_apm
+    audio_apm.build_apm(args.apm)  # validate the spec up front
+    audio_dir = AUDIO if args.noise == "clean" else HERE / "dataset" / "audio_noisy" / args.noise
+    print(f"stt: {args.stt}    vocab: {vocab or 'none'}    "
+          f"noise: {args.noise}    apm: {args.apm or 'off'}")
 
     rows = [json.loads(l) for l in SAMPLES.read_text().splitlines() if l.strip()]
     if args.limit:
@@ -79,15 +88,17 @@ async def main() -> None:
     transcripts: dict[str, str] = {}   # sample_id -> what AWS Transcribe heard
 
     for s in rows:
-        wav = AUDIO / f"{s['id']}.wav"
+        wav = audio_dir / f"{s['id']}.wav"
         if not wav.exists():
-            print(f"skip {s['id']} (no audio — run make_dataset.py)")
+            print(f"skip {s['id']} (no audio at {wav} — run make_dataset.py / make_noisy.py)")
             continue
         try:
             if args.stt == "deepgram":
                 transcript = await transcribe_deepgram(str(wav), keyterms=keyterms)
             else:
-                transcript = await transcribe_file(str(wav), REGION, vocab=vocab)
+                # one APM per file — it's stateful
+                per_file_apm = audio_apm.build_apm(args.apm) if args.apm else None
+                transcript = await transcribe_file(str(wav), REGION, vocab=vocab, apm=per_file_apm)
         except Exception as e:  # noqa: BLE001 — network blip, skip this sample
             print(f"  {s['id']:>4} transcribe ERROR {e!r}"[:160])
             continue
@@ -117,7 +128,8 @@ async def main() -> None:
             await asyncio.sleep(args.sleep)
 
     trace_flush()
-    _report(run_id, args.models, results, transcripts, seeding, args.stt)  # always, from memory
+    conditions = f"noise: {args.noise}    apm: {args.apm or 'off'}"
+    _report(run_id, args.models, results, transcripts, seeding, args.stt, conditions)
 
     # Supabase is best-effort — a network blip must not lose the run.
     if sb and results:
@@ -130,10 +142,10 @@ async def main() -> None:
 
 def _report(run_id: str, models: list[str], results: list[dict],
             transcripts: dict[str, str] | None = None, seeding: str = "none",
-            stt: str = "aws") -> None:
+            stt: str = "aws", conditions: str = "noise: clean    apm: off") -> None:
     engine = {"aws": "AWS Transcribe", "deepgram": "Deepgram Nova-3"}.get(stt, stt)
     lines = [f"# Eval run {run_id}", "",
-             f"stt: {engine}    name seeding: {seeding}", ""]
+             f"stt: {engine}    name seeding: {seeding}", conditions, ""]
     lines.append("| model | kind | n | exact | phonetic | mean WER | mean lev |")
     lines.append("|---|---|--:|--:|--:|--:|--:|")
     for model in models:
