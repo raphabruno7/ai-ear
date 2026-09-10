@@ -99,8 +99,9 @@ end-to-end (2026-09-01). `pricing.py` `LLM_RATES` has per-backend rates.
 
 - **Live e2e** — ✅ verified 2026-09-07 (needs real Wi-Fi, not an iPhone hotspot —
   CGNAT breaks WebRTC UDP; signalling connects, media doesn't).
-- **Bedrock** — throttle cleared ~2026-09-02; **sleep mode** (default is Gemini).
-  Set `EXTRACT_BACKEND=bedrock` for the Haiku-vs-Gemini A/B.
+- **Bedrock** — throttle cleared ~2026-09-02. Local default is Gemini; **the
+  Railway deploy runs `EXTRACT_BACKEND=bedrock`** and the Haiku 4.5 extraction
+  path is verified live (2026-09-10).
 - **Migrations `005`** ✅ 2026-09-02, **`006`** (latency stage columns) ✅ 2026-09-09.
   **Langfuse** — ✅ listener + eval trace (v4).
 - **Speech→screen latency** — `extracted_fields` has `stt_lag_ms` / `debounce_ms`
@@ -124,10 +125,13 @@ end-to-end (2026-09-01). `pricing.py` `LLM_RATES` has per-backend rates.
   **`call-copilot-liart.vercel.app`** (behind `ADMIN_SECRET` login). Env vars set
   via `vercel env` (Supabase, ADMIN_SECRET, + the health-check keys). `vercel --prod`
   from `web/`. `/api/health` → 4/4 green.
-- **listener/ → Railway** — code ready (`agent.py --watch call-`, Dockerfile,
-  `railway.toml` healthcheck `/health`). **Blocked:** Railway trial expired, needs
-  a paid plan. On Railway set `EXTRACT_BACKEND=bedrock` (Vertex ADC won't work in
-  a container without a GCP service-account key).
+- **listener/ → Railway** ✅ 2026-09-10. Project `call-copilot-listener`, URL
+  **`call-copilot-listener-production.up.railway.app`** (`/health` → `{"status":"ok"}`).
+  `agent.py --watch call-` via Dockerfile; `railway.toml` healthcheck `/health`;
+  listens on `$PORT` (8080). Deploy: `cd listener && railway up --ci`. Env vars via
+  `railway add -v`/`railway variables --set` — **`EXTRACT_BACKEND=bedrock`** (Vertex
+  ADC has no container auth), `GCP_*` omitted. Bedrock Haiku 4.5 path verified live
+  end-to-end (`sim_call.py --room call-remote-2` → 13 turns, full field set).
 - `.env.local` in `web/` is a **symlink → ../.env**; `vercel link` writes
   `VERCEL_OIDC_TOKEN` through it into `.env` — strip that line if it reappears.
 

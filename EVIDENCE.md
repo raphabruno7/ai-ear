@@ -211,10 +211,14 @@ AWS SES ──► pre-visit briefing email (per session)
 - **Dashboard — live on Vercel** (`call-copilot-liart.vercel.app`, 2026-09-09).
   Behind an `ADMIN_SECRET` login (it reads Supabase with the service-role key).
   `/api/health` → 4/4 green against the real infra.
-- **Listener — deployable, not deployed.** `agent.py --watch call-` runs it as a
-  service (polls LiveKit for new rooms, one shared fields-WS + `/health` on one
-  port); Dockerfile + `railway.toml` ready. Railway account is on an expired
-  trial — needs a paid plan to push.
+- **Listener — live on Railway** (`call-copilot-listener-production.up.railway.app`,
+  2026-09-10). `agent.py --watch call-` runs it as a service (polls LiveKit for
+  new rooms, one shared fields-WS + `/health` on `$PORT`); Dockerfile +
+  `railway.toml` healthcheck. `EXTRACT_BACKEND=bedrock` (Vertex ADC has no
+  container auth). Verified end-to-end: `sim_call.py --room call-remote-2` →
+  Railway container → **Bedrock Haiku 4.5 live** → Supabase — 13 turns, full
+  field set (`owner_name` "Kathleen O'Brien", `pet_name` Luna, phone, email,
+  time, clinical notes). First live exercise of the Bedrock path.
 
 ## Pending (not code)
 
@@ -230,5 +234,6 @@ AWS SES ──► pre-visit briefing email (per session)
 
 ## What this is not
 
-A product with real users. The dashboard is deployed; the listener runs against
-a *simulated* two-party call (`sim_call.py`), not live phone traffic.
+A product with real users. Dashboard and listener are both deployed and the
+Bedrock path is exercised live, but the calls are still *simulated* two-party
+audio (`sim_call.py`), not live phone traffic — SIP is the remaining gap.
