@@ -108,3 +108,7 @@ cd web && npm run build && npm start                   # dashboard on :3000
 ## Contributing
 
 Solo project. Work goes on a branch → PR → merge to `main` → push. No remote CI yet.
+
+## License
+
+[Apache License 2.0](LICENSE). Copyright 2026 Raphael Bruno.
